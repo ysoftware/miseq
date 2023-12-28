@@ -65,7 +65,7 @@ void append_note_off(uint8_t note, uint8_t velocity) {
     append_byte(note);
     append_byte(velocity);
 
-    printf("Note on: %d velocity %d: ", note, velocity);
+    printf("Note off: %d velocity %d: ", note, velocity);
     print_hex(data + start, size - start); 
 }
 
