@@ -47,26 +47,57 @@ void append_byte(int8_t byte) {
     size += 1;
 }
 
-void append_note_on(uint8_t note, uint8_t velocity) {
+void append_note_on(uint8_t key, uint8_t velocity) {
     uint64_t start = size;
     
     append_byte(0x90); // channel 0
-    append_byte(note);
+    append_byte(key);
     append_byte(velocity);
 
-    printf("Note on: %d velocity %d: ", note, velocity);
+    printf("Note on: %d velocity %d: ", key, velocity);
     print_hex(data + start, size - start); 
 }
 
-void append_note_off(uint8_t note, uint8_t velocity) {
+void append_note_off(uint8_t key, uint8_t velocity) {
     uint64_t start = size;
     
     append_byte(0x80); // channel 0
-    append_byte(note);
+    append_byte(key);
     append_byte(velocity);
 
-    printf("Note off: %d velocity %d: ", note, velocity);
+    printf("Note off: %d velocity %d: ", key, velocity);
     print_hex(data + start, size - start); 
+}
+
+void append_delta_time(uint32_t ticks) {
+    uint64_t start = size;
+
+    if (ticks <= 127) {
+        append_byte((uint8_t) ticks);
+    } else { // VLQ format
+        uint32_t ticks_left = ticks;
+        uint8_t buffer[5]; // maximum 5 bytes for a 32-bit number
+        int count = 0;
+
+        while (ticks_left > 0) {
+            buffer[count++] = (uint8_t)(ticks_left & 0x7F);
+            ticks_left >>= 7;
+        }
+
+        // reverse the order of bytes and set the MSB to 1 for all but the last byte
+        for (int i = count - 1; i >= 0; --i) {
+            uint8_t byte = buffer[i];
+            if (i != 0) {
+                byte |= 0x80; // set MSB to 1 for continuation
+            }
+            append_byte(byte);
+        }
+    }
+
+    if (ticks > 0) {
+        printf("Delay: %d ticks: ", ticks);
+        print_hex(data + start, size - start); 
+    }
 }
 
 void append_header() {
@@ -106,16 +137,18 @@ void append_track_chunk() {
 
     uint64_t chunk_start = size;
 
-    // initial time offset
-
     // track events
-    append_byte(0);
+    append_delta_time(0);
     append_note_on(0x24, 0x64);
-    append_byte(127);
+    append_delta_time(30000);
+    append_note_on(0x22, 0x64);
+    append_delta_time(127);
     append_note_off(0x24, 0x64);
-    append_byte(0);
+    append_delta_time(127);
+    append_note_off(0x22, 0x64);
 
     // end of track meta event
+    append_byte(0xff);
     append_byte(0x2f);
     append_byte(0);
 
