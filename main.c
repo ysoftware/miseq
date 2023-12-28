@@ -2,8 +2,9 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
 
-int ALLOC_SIZE = 1024;
+int ALLOC_SIZE = 10240;
 
 void* data;
 uint64_t size = 0;
@@ -54,8 +55,8 @@ void append_note_on(uint8_t key, uint8_t velocity) {
     append_byte(key);
     append_byte(velocity);
 
-    printf("Note on: %d velocity %d: ", key, velocity);
-    print_hex(data + start, size - start); 
+    /* printf("Note on: %d velocity %d: ", key, velocity); */
+    /* print_hex(data + start, size - start); */ 
 }
 
 void append_note_off(uint8_t key, uint8_t velocity) {
@@ -65,8 +66,8 @@ void append_note_off(uint8_t key, uint8_t velocity) {
     append_byte(key);
     append_byte(velocity);
 
-    printf("Note off: %d velocity %d: ", key, velocity);
-    print_hex(data + start, size - start); 
+    /* printf("Note off: %d velocity %d: ", key, velocity); */
+    /* print_hex(data + start, size - start); */ 
 }
 
 void append_delta_time(uint32_t ticks) {
@@ -94,10 +95,10 @@ void append_delta_time(uint32_t ticks) {
         }
     }
 
-    if (ticks > 0) {
-        printf("Delay: %d ticks: ", ticks);
-        print_hex(data + start, size - start); 
-    }
+    /* if (ticks > 0) { */
+    /*     printf("Delay: %d ticks: ", ticks); */
+    /*     print_hex(data + start, size - start); */ 
+    /* } */
 }
 
 void append_header() {
@@ -121,8 +122,31 @@ void append_header() {
     append_byte(0x00);
     append_byte(0x60);
 
-    printf("Header chunk:\n");
-    print_hex(data, size);
+    /* printf("Header chunk:\n"); */
+    /* print_hex(data, size); */
+}
+
+void append_track_events() {
+    uint64_t full_note_duration = 20;
+    uint64_t base_velocity = 80;
+    uint64_t base_key = 60;
+    uint64_t base_note_duration = 15;
+
+    append_delta_time(0);
+    for (int i = 0; i < 1000; i++) {
+        double wave1 = cos((double)i / 4) * 19;
+        double wave2 = sin((double)i / 15) * 50;
+        double wave3 = sin((double)i / 3) * 7;
+
+        uint8_t key = (uint8_t) ((double) base_key - wave1 - wave3);
+        uint8_t velocity = (uint8_t) ((double) base_velocity - wave2);
+        uint8_t note_duration = (uint8_t) ((double) base_note_duration - wave3);
+
+        append_note_on(key, velocity);
+        append_delta_time(note_duration);
+        append_note_off(key, velocity);
+        append_delta_time(full_note_duration - note_duration);
+    }
 }
 
 void append_track_chunk() {
@@ -138,14 +162,7 @@ void append_track_chunk() {
     uint64_t chunk_start = size;
 
     // track events
-    append_delta_time(0);
-    append_note_on(0x24, 0x64);
-    append_delta_time(30000);
-    append_note_on(0x22, 0x64);
-    append_delta_time(127);
-    append_note_off(0x24, 0x64);
-    append_delta_time(127);
-    append_note_off(0x22, 0x64);
+    append_track_events();
 
     // end of track meta event
     append_byte(0xff);
@@ -158,9 +175,9 @@ void append_track_chunk() {
     uint32_t value = le_to_be(length_value);
     memcpy((uint64_t*)pointer, &value, 4);
 
-    printf("\n");
-    printf("Full track chunk\n");
-    print_hex(data + chunk_start, size - chunk_start); 
+    /* printf("\n"); */
+    /* printf("Full track chunk\n"); */
+    /* print_hex(data + chunk_start, size - chunk_start); */ 
 }
 
 void write_data(const char* filename, void* data, uint64_t size) {
@@ -173,7 +190,7 @@ void write_data(const char* filename, void* data, uint64_t size) {
 
     fwrite(data, 1, size, file);
     fclose(file);
-    printf("Wrote %d bytes to %s.\n", size, filename);
+    printf("Written %d bytes to %s.\n", size, filename);
 }
 
 int main() {
@@ -184,11 +201,11 @@ int main() {
     printf("\n");
 
     append_track_chunk();
-    printf("\n");
+    /* printf("\n"); */
 
-    printf("Full document:\n");
-    print_hex(data, size);
-    printf("\n");
+    /* printf("Full document:\n"); */
+    /* print_hex(data, size); */
+    /* printf("\n"); */
 
     write_data("1.mid", data, size);
 }
