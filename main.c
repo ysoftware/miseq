@@ -1,10 +1,10 @@
+#include "raylib.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-
-int ALLOC_SIZE = 10240;
 
 void* data;
 uint64_t size = 0;
@@ -54,9 +54,6 @@ void append_note_on(uint8_t key, uint8_t velocity) {
     append_byte(0x90); // channel 0
     append_byte(key);
     append_byte(velocity);
-
-    /* printf("Note on: %d velocity %d: ", key, velocity); */
-    /* print_hex(data + start, size - start); */ 
 }
 
 void append_note_off(uint8_t key, uint8_t velocity) {
@@ -65,9 +62,6 @@ void append_note_off(uint8_t key, uint8_t velocity) {
     append_byte(0x80); // channel 0
     append_byte(key);
     append_byte(velocity);
-
-    /* printf("Note off: %d velocity %d: ", key, velocity); */
-    /* print_hex(data + start, size - start); */ 
 }
 
 void append_delta_time(uint32_t ticks) {
@@ -94,11 +88,6 @@ void append_delta_time(uint32_t ticks) {
             append_byte(byte);
         }
     }
-
-    /* if (ticks > 0) { */
-    /*     printf("Delay: %d ticks: ", ticks); */
-    /*     print_hex(data + start, size - start); */ 
-    /* } */
 }
 
 void append_header() {
@@ -121,9 +110,6 @@ void append_header() {
     // timing resolution (2 bytes)
     append_byte(0x00);
     append_byte(0x60);
-
-    /* printf("Header chunk:\n"); */
-    /* print_hex(data, size); */
 }
 
 void append_track_events() {
@@ -174,10 +160,6 @@ void append_track_chunk() {
     uint32_t length_value = (uint32_t) (size - chunk_start);
     uint32_t value = le_to_be(length_value);
     memcpy((uint64_t*)pointer, &value, 4);
-
-    /* printf("\n"); */
-    /* printf("Full track chunk\n"); */
-    /* print_hex(data + chunk_start, size - chunk_start); */ 
 }
 
 void write_data(const char* filename, void* data, uint64_t size) {
@@ -193,20 +175,28 @@ void write_data(const char* filename, void* data, uint64_t size) {
     printf("Written %d bytes to %s.\n", size, filename);
 }
 
+/* void write_midi_to_file() { */
+/*     const int ALLOC_SIZE = 10240; */
+/*     data = malloc(ALLOC_SIZE); */
+/*     memset(data, 0, ALLOC_SIZE); */
+/*     append_header(); */
+/*     append_track_chunk(); */
+/*     write_data("1.mid", data, size); */
+/* } */
+
 int main() {
-    data = malloc(ALLOC_SIZE);
-    memset(data, 0, ALLOC_SIZE);
+    const int screenWidth = 800;
+    const int screenHeight = 450;
+    InitWindow(screenWidth, screenHeight, "miseq");
+    SetTargetFPS(60);
 
-    append_header();
-    printf("\n");
-
-    append_track_chunk();
-    /* printf("\n"); */
-
-    /* printf("Full document:\n"); */
-    /* print_hex(data, size); */
-    /* printf("\n"); */
-
-    write_data("1.mid", data, size);
+    while(!WindowShouldClose()) {
+        BeginDrawing();
+            ClearBackground(RAYWHITE);
+            DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
+            DrawRectangle(screenWidth/2 - 2, 0, 4, screenHeight, LIGHTGRAY);
+        EndDrawing();
+    }
+    CloseWindow();
 }
 
