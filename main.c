@@ -6,6 +6,21 @@
 #include <string.h>
 #include <math.h>
 
+const int FPS = 300;
+const int SCREEN_WIDTH = 1280;
+const int SCREEN_HEIGHT = 768;
+
+struct Note {
+    uint8_t key;
+    uint8_t velocity;
+    uint32_t start_tick;
+    uint32_t end_tick;
+};
+
+struct Note notes[10000];
+uint32_t notes_count = 0;
+
+// for midi rendering
 void* data;
 uint64_t size = 0;
 
@@ -112,29 +127,6 @@ void append_header() {
     append_byte(0x60);
 }
 
-void append_track_events() {
-    uint64_t full_note_duration = 20;
-    uint64_t base_velocity = 80;
-    uint64_t base_key = 60;
-    uint64_t base_note_duration = 15;
-
-    append_delta_time(0);
-    for (int i = 0; i < 1000; i++) {
-        double wave1 = cos((double)i / 4) * 19;
-        double wave2 = sin((double)i / 15) * 50;
-        double wave3 = sin((double)i / 3) * 7;
-
-        uint8_t key = (uint8_t) ((double) base_key - wave1 - wave3);
-        uint8_t velocity = (uint8_t) ((double) base_velocity - wave2);
-        uint8_t note_duration = (uint8_t) ((double) base_note_duration - wave3);
-
-        append_note_on(key, velocity);
-        append_delta_time(note_duration);
-        append_note_off(key, velocity);
-        append_delta_time(full_note_duration - note_duration);
-    }
-}
-
 void append_track_chunk() {
     append_string("MTrk");
 
@@ -148,7 +140,7 @@ void append_track_chunk() {
     uint64_t chunk_start = size;
 
     // track events
-    append_track_events();
+    // remap them from notes
 
     // end of track meta event
     append_byte(0xff);
@@ -175,26 +167,94 @@ void write_data(const char* filename, void* data, uint64_t size) {
     printf("Written %d bytes to %s.\n", size, filename);
 }
 
-/* void write_midi_to_file() { */
-/*     const int ALLOC_SIZE = 10240; */
-/*     data = malloc(ALLOC_SIZE); */
-/*     memset(data, 0, ALLOC_SIZE); */
-/*     append_header(); */
-/*     append_track_chunk(); */
-/*     write_data("1.mid", data, size); */
-/* } */
+void create_notes() {
+    notes_count = 0;
+
+    uint32_t current_tick = 0;
+    uint32_t note_duration = 60;
+
+    double base_velocity = 80;
+    double base_key = 60;
+    double base_note_duration = 15;
+
+    for (double i = 0; i < 1000; i++) {
+        double wave1 = cos(i / 4) * 19;
+        double wave2 = sin(i / 15) * 50;
+        double wave3 = sin(i / 3) * 7;
+
+        uint8_t key = (uint8_t) (base_key - wave1 - wave3);
+        uint8_t velocity = (uint8_t) (base_velocity - wave2);
+        uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
+    
+        struct Note note = {
+            key,
+            velocity,
+            current_tick,
+            current_tick + note_duration
+        };
+
+        notes[notes_count] = note;
+        notes_count += 1;
+
+        current_tick += note_duration;
+    }
+}
+
+void DrawNotes() {
+    // SCROLL CODE
+    double smoothing_factor = GetFrameTime() * 8; // TODO: learn how this works and why. how to make it duration of 1 second
+    static float target_scroll_offset = 0;
+    static float scroll_offset = 0;
+
+    int scroll_power = SCREEN_WIDTH / 4;
+    if (IsKeyDown(KEY_LEFT_SHIFT))  scroll_power *= 5;
+    target_scroll_offset += GetMouseWheelMove() * scroll_power;
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+        target_scroll_offset = 0;
+    } else if (target_scroll_offset < 0) {
+        target_scroll_offset += -target_scroll_offset * smoothing_factor;
+    } 
+
+    scroll_offset -= (scroll_offset - target_scroll_offset) * smoothing_factor;
+
+    float diff = scroll_offset - target_scroll_offset;
+    if (diff < 0.1 && diff > -0.1) {
+        scroll_offset = target_scroll_offset;
+    }
+    // SCROLL CODE
+    
+    char text[100];
+    sprintf(text, "Frame Time: %f", GetFrameTime());
+    DrawText(text, 10, 10, 20, LIGHTGRAY);
+
+    const int key_height = 8;
+    const int tick_width = 1;
+
+    for (int i = 0; i < notes_count; i++) {
+        struct Note note = notes[i];
+
+        int posX = note.start_tick * tick_width - (int) scroll_offset;
+        int posY = note.key * key_height;
+        int width = (note.end_tick - note.start_tick) * tick_width;
+        int height = key_height;
+
+        if (posX < SCREEN_WIDTH) {
+            DrawRectangle(posX, posY, width, height, LIGHTGRAY);
+        }
+    }
+}
 
 int main() {
-    const int screenWidth = 800;
-    const int screenHeight = 450;
-    InitWindow(screenWidth, screenHeight, "miseq");
-    SetTargetFPS(60);
+    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "miseq");
+    SetTargetFPS(FPS);
 
+    create_notes();
+    
     while(!WindowShouldClose()) {
         BeginDrawing();
-            ClearBackground(RAYWHITE);
-            DrawText("Congrats! You created your first window!", 190, 200, 20, LIGHTGRAY);
-            DrawRectangle(screenWidth/2 - 2, 0, 4, screenHeight, LIGHTGRAY);
+            ClearBackground(DARKGRAY);
+            DrawNotes();
         EndDrawing();
     }
     CloseWindow();
