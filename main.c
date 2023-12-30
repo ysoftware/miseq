@@ -7,8 +7,8 @@
 #include <math.h>
 
 const int FPS = 300;
-const int SCREEN_WIDTH = 1280;
-const int SCREEN_HEIGHT = 768;
+const int SCREEN_WIDTH = 1920;
+const int SCREEN_HEIGHT = 1080;
 
 struct Note {
     uint8_t key;
@@ -201,35 +201,74 @@ void create_notes() {
 }
 
 void DrawNotes() {
+    const float default_key_height = 8;
+    const float default_scroll_offset = 0;
+
+    static float scroll_offset = default_scroll_offset;
+    static float key_height = default_key_height;
+    static float tick_width = 1;
+
     // SCROLL CODE
-    double smoothing_factor = GetFrameTime() * 8; // TODO: learn how this works and why. how to make it duration of 1 second
-    static float target_scroll_offset = 0;
-    static float scroll_offset = 0;
+    {
+        static float target_scroll_offset = default_scroll_offset;
+        double smoothing_factor = GetFrameTime() * 8; // TODO: learn how this works and why. how to make it duration of 1 second
 
-    int scroll_power = SCREEN_WIDTH / 4;
-    if (IsKeyDown(KEY_LEFT_SHIFT))  scroll_power *= 5;
-    target_scroll_offset += GetMouseWheelMove() * scroll_power;
+        if (!IsKeyDown(KEY_LEFT_CONTROL)) {
+            int scroll_power = SCREEN_WIDTH / 4;
+            if (IsKeyDown(KEY_LEFT_SHIFT))  scroll_power *= 5;
+            target_scroll_offset += GetMouseWheelMove() * scroll_power;
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-        target_scroll_offset = 0;
-    } else if (target_scroll_offset < 0) {
-        target_scroll_offset += -target_scroll_offset * smoothing_factor;
-    } 
+            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+                target_scroll_offset = 0;
+            }
+        }
 
-    scroll_offset -= (scroll_offset - target_scroll_offset) * smoothing_factor;
+        if (target_scroll_offset < 0) {
+            target_scroll_offset += -target_scroll_offset * smoothing_factor;
+        } 
 
-    float diff = scroll_offset - target_scroll_offset;
-    if (diff < 0.1 && diff > -0.1) {
-        scroll_offset = target_scroll_offset;
+        scroll_offset -= (scroll_offset - target_scroll_offset) * smoothing_factor;
+
+        float diff = scroll_offset - target_scroll_offset;
+        if (diff < 0.01 && diff > -0.01) {
+            scroll_offset = target_scroll_offset;
+        }
     }
-    // SCROLL CODE
-    
-    char text[100];
-    sprintf(text, "Frame Time: %f", GetFrameTime());
-    DrawText(text, 10, 10, 20, LIGHTGRAY);
 
-    const int key_height = 8;
-    const int tick_width = 1;
+    {
+        static float target_key_height = default_key_height;
+        double smoothing_factor = GetFrameTime() * 8;
+
+        if (IsKeyDown(KEY_LEFT_CONTROL)) {
+            target_key_height += GetMouseWheelMove() * 1;
+
+            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+                target_key_height = default_key_height;
+            }
+        }
+
+        if (target_key_height < 3) {
+            target_key_height += (default_key_height-target_key_height) * smoothing_factor;
+        }
+        if (target_key_height > 10) {
+            target_key_height -= (target_key_height-default_key_height) * smoothing_factor;
+        }
+
+        key_height -= (key_height - target_key_height) * smoothing_factor;
+
+        float diff = key_height - target_key_height;
+        if (diff < 0.01 && diff > -0.01) {
+            key_height = target_key_height;
+        }
+    }
+
+    DrawRectangle(
+        -scroll_offset, 
+        0, 
+        tick_width * notes[notes_count-1].end_tick, // TODO: only considering notes are sorted
+        128 * key_height, 
+        GRAY
+    );
 
     for (int i = 0; i < notes_count; i++) {
         struct Note note = notes[i];
@@ -240,9 +279,13 @@ void DrawNotes() {
         int height = key_height;
 
         if (posX < SCREEN_WIDTH) {
-            DrawRectangle(posX, posY, width, height, LIGHTGRAY);
+            DrawRectangle(posX, posY, width, height, BLACK);
         }
     }
+
+    char text[100];
+    sprintf(text, "Scroll offset: %f\nKey height: %f", scroll_offset, key_height);
+    DrawText(text, 10, 10, 20, LIGHTGRAY);
 }
 
 int main() {
