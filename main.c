@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 
 const int FPS = 300;
 const int SCREEN_WIDTH = 1920;
@@ -167,22 +168,32 @@ void write_data(const char* filename, void* data, uint64_t size) {
     printf("Written %d bytes to %s.\n", size, filename);
 }
 
+double random_value() {
+    double value = (double)GetRandomValue(0, 100000) / 100000;
+    return value;
+}
+
 void create_notes() {
+    srand(time(NULL));
     notes_count = 0;
 
     uint32_t current_tick = 0;
     uint32_t note_duration = 60;
 
     double base_velocity = 80;
-    double base_key = 60;
+    double base_key = 64;
     double base_note_duration = 15;
 
-    for (double i = 0; i < 10000; i++) {
-        double wave1 = cos(i / 4) * 19;
-        double wave2 = sin(i / 15) * 50;
-        double wave3 = sin(i / 3) * 7;
+    double wave1_random = 20 * random_value();
+    double wave2_random = 15 * random_value();
+    double wave3_random = 5 * random_value();
 
-        uint8_t key = (uint8_t) (base_key - wave1 - wave3);
+    for (double i = 0; i < 10000; i++) {
+        double wave1 = cos(i / wave1_random) * 64 * random_value();
+        double wave2 = sin(i / wave2_random) * 40 * random_value();
+        double wave3 = sin(i / wave3_random) * 9 * random_value();
+
+        uint8_t key = (uint8_t) (base_key - wave1);
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
         uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
     
@@ -200,8 +211,8 @@ void create_notes() {
     }
 }
 
-void DrawNotes() {
-    const float default_key_height = 8;
+void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
+    const float default_key_height = 6;
     const float default_scroll_offset = 0;
     const float default_tick_width = 1;
 
@@ -231,7 +242,7 @@ void DrawNotes() {
         tick_width -= change;
 
         if (change != 0) {
-            float preceding_ticks = (scroll_offset + SCREEN_WIDTH / 2) / tick_width;
+            float preceding_ticks = (scroll_offset + view_width / 2) / tick_width;
             adjust_scroll_offset_after_scaling -= preceding_ticks * change;
         }
 
@@ -248,7 +259,7 @@ void DrawNotes() {
     {
         static float target = default_key_height;
         const float minValue = 4;
-        const float maxValue = 8;
+        const float maxValue = 12;
 
         if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT)) {
             target += GetMouseWheelMove() * 1;
@@ -273,7 +284,7 @@ void DrawNotes() {
     {
         static float target = default_scroll_offset;
         const float minValue = 0;
-        const float maxValue = scroll_content_width - SCREEN_WIDTH;
+        const float maxValue = scroll_content_width - view_width;
 
         if (adjust_scroll_offset_after_scaling != 0) {
             target += adjust_scroll_offset_after_scaling;
@@ -281,7 +292,7 @@ void DrawNotes() {
         }
 
         if (!IsKeyDown(KEY_LEFT_CONTROL)) {
-            int scroll_power = SCREEN_WIDTH / 4;
+            int scroll_power = view_width / 4;
             if (IsKeyDown(KEY_LEFT_SHIFT))  scroll_power *= 5;
             target += GetMouseWheelMove() * scroll_power;
 
@@ -292,7 +303,7 @@ void DrawNotes() {
 
         scroll_offset -= (scroll_offset - target) * smoothing_factor;
 
-        if (scroll_content_width > SCREEN_WIDTH) {
+        if (scroll_content_width > view_width) {
             if (target < minValue)  target = minValue;
             else if (target > maxValue)  target = maxValue;
         } else {
@@ -307,7 +318,7 @@ void DrawNotes() {
 
     DrawRectangle(
         -scroll_offset, 
-        0,
+        view_y,
         scroll_content_width,
         128 * key_height, 
         GRAY
@@ -322,8 +333,8 @@ void DrawNotes() {
         int width = (note.end_tick - note.start_tick) * tick_width;
         int height = key_height;
 
-        if (posX < SCREEN_WIDTH && posX + width > 0) {
-            DrawRectangle(posX, posY, width, height, BLACK);
+        if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
+            DrawRectangle(view_x + posX, view_y + posY, width, height, BLACK);
             draw_count += 1;
         }
     }
@@ -331,6 +342,42 @@ void DrawNotes() {
     char text[100];
     sprintf(text, "Scroll offset: %f\nKey height: %fTick width: %f\nDraw count: %d", scroll_offset, key_height, tick_width, draw_count);
     DrawText(text, 10, 10, 20, LIGHTGRAY);
+}
+
+void DrawRandomizeButton(int view_x, int view_y, int view_width, int view_height) {
+    struct Rectangle frame = { view_x, view_y, view_width, view_height };
+    bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
+
+    static bool is_interacting = false;
+    if (is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        is_interacting = true;
+    }
+
+    Color background_color;
+    if (is_mouse_over && is_interacting)  background_color = YELLOW;
+    else if (is_mouse_over)  background_color = BLUE;
+    else if (is_interacting)  background_color = RED;
+    else  background_color = LIGHTGRAY;
+
+    DrawRectangleRounded(frame, 5, 1, background_color);
+
+    int title_font_size = 20;
+    const char* title = "Generate";
+    int text_width = MeasureText(title, title_font_size);
+    DrawText(
+        title,
+        view_x + view_width / 2 - text_width / 2,
+        view_y + view_height / 2 - title_font_size / 2,
+        title_font_size,
+        DARKGRAY
+    );
+
+    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        if (is_mouse_over && is_interacting) {
+            create_notes();
+        }
+        is_interacting = false;
+    }
 }
 
 int main() {
@@ -342,7 +389,26 @@ int main() {
     while(!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(DARKGRAY);
-            DrawNotes();
+
+            const int notes_panel_top_offset = 300;
+            DrawNotes(
+                0, 
+                notes_panel_top_offset,
+                SCREEN_WIDTH,
+                SCREEN_HEIGHT - notes_panel_top_offset
+            );
+
+            const int randomize_button_top_offset = 50;
+            const int randomize_button_right_offset = 50;
+            const int randomize_button_width = 200;
+            const int randomize_button_height = 50;
+            DrawRandomizeButton(
+                SCREEN_WIDTH - randomize_button_width - randomize_button_right_offset,
+                randomize_button_top_offset,
+                randomize_button_width,
+                randomize_button_height
+            );
+
         EndDrawing();
     }
     CloseWindow();
