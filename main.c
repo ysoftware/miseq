@@ -177,7 +177,7 @@ void create_notes() {
     double base_key = 60;
     double base_note_duration = 15;
 
-    for (double i = 0; i < 1000; i++) {
+    for (double i = 0; i < 10000; i++) {
         double wave1 = cos(i / 4) * 19;
         double wave2 = sin(i / 15) * 50;
         double wave3 = sin(i / 3) * 7;
@@ -307,12 +307,13 @@ void DrawNotes() {
 
     DrawRectangle(
         -scroll_offset, 
-        0, 
+        0,
         scroll_content_width,
         128 * key_height, 
         GRAY
     );
 
+    int draw_count = 0;
     for (int i = 0; i < notes_count; i++) {
         struct Note note = notes[i];
 
@@ -321,13 +322,14 @@ void DrawNotes() {
         int width = (note.end_tick - note.start_tick) * tick_width;
         int height = key_height;
 
-        if (posX < SCREEN_WIDTH) {
+        if (posX < SCREEN_WIDTH && posX + width > 0) {
             DrawRectangle(posX, posY, width, height, BLACK);
+            draw_count += 1;
         }
     }
 
     char text[100];
-    sprintf(text, "Scroll offset: %f\nKey height: %f", scroll_offset, key_height);
+    sprintf(text, "Scroll offset: %f\nKey height: %fTick width: %f\nDraw count: %d", scroll_offset, key_height, tick_width, draw_count);
     DrawText(text, 10, 10, 20, LIGHTGRAY);
 }
 
