@@ -203,69 +203,112 @@ void create_notes() {
 void DrawNotes() {
     const float default_key_height = 8;
     const float default_scroll_offset = 0;
+    const float default_tick_width = 1;
 
     static float scroll_offset = default_scroll_offset;
     static float key_height = default_key_height;
-    static float tick_width = 1;
+    static float tick_width = default_tick_width;
 
-    // SCROLL CODE
+    double smoothing_factor = GetFrameTime() * 10;
+    float scroll_content_width = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    float adjust_scroll_offset_after_scaling = 0;
+
+    // SCALE WIDTH
     {
-        static float target_scroll_offset = default_scroll_offset;
-        double smoothing_factor = GetFrameTime() * 8; // TODO: learn how this works and why. how to make it duration of 1 second
+        static float target = default_tick_width;
+        const float minValue = 0.1;
+        const float maxValue = 8;
+
+        if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT)) {
+            target += GetMouseWheelMove() * 0.05;
+
+            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+                target = default_tick_width;
+            }
+        }
+
+        float change = (tick_width - target) * smoothing_factor;
+        tick_width -= change;
+
+        if (change != 0) {
+            float preceding_ticks = (scroll_offset + SCREEN_WIDTH / 2) / tick_width;
+            adjust_scroll_offset_after_scaling -= preceding_ticks * change;
+        }
+
+        if (target < minValue)  target = minValue;
+        else if (target > maxValue)  target = maxValue;
+
+        float diff = tick_width - target;
+        if (diff < 0.0005 && diff > -0.0005) {
+            tick_width = target;
+        }
+    }
+
+    // SCALE HEIGHT
+    {
+        static float target = default_key_height;
+        const float minValue = 4;
+        const float maxValue = 8;
+
+        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT)) {
+            target += GetMouseWheelMove() * 1;
+
+            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+                target = default_key_height;
+            }
+        }
+
+        key_height -= (key_height - target) * smoothing_factor;
+
+        if (target < minValue)  target = minValue;
+        else if (target > maxValue)  target = maxValue;
+
+        float diff = key_height - target;
+        if (diff < 0.0005 && diff > -0.0005) {
+            key_height = target;
+        }    
+    }
+
+    // SCROLL
+    {
+        static float target = default_scroll_offset;
+        const float minValue = 0;
+        const float maxValue = scroll_content_width - SCREEN_WIDTH;
+
+        if (adjust_scroll_offset_after_scaling != 0) {
+            target += adjust_scroll_offset_after_scaling;
+            scroll_offset += adjust_scroll_offset_after_scaling;
+        }
 
         if (!IsKeyDown(KEY_LEFT_CONTROL)) {
             int scroll_power = SCREEN_WIDTH / 4;
             if (IsKeyDown(KEY_LEFT_SHIFT))  scroll_power *= 5;
-            target_scroll_offset += GetMouseWheelMove() * scroll_power;
+            target += GetMouseWheelMove() * scroll_power;
 
             if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-                target_scroll_offset = 0;
+                target = 0;
             }
         }
 
-        if (target_scroll_offset < 0) {
-            target_scroll_offset += -target_scroll_offset * smoothing_factor;
-        } 
+        scroll_offset -= (scroll_offset - target) * smoothing_factor;
 
-        scroll_offset -= (scroll_offset - target_scroll_offset) * smoothing_factor;
-
-        float diff = scroll_offset - target_scroll_offset;
-        if (diff < 0.01 && diff > -0.01) {
-            scroll_offset = target_scroll_offset;
-        }
-    }
-
-    {
-        static float target_key_height = default_key_height;
-        double smoothing_factor = GetFrameTime() * 8;
-
-        if (IsKeyDown(KEY_LEFT_CONTROL)) {
-            target_key_height += GetMouseWheelMove() * 1;
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-                target_key_height = default_key_height;
-            }
+        if (scroll_content_width > SCREEN_WIDTH) {
+            if (target < minValue)  target = minValue;
+            else if (target > maxValue)  target = maxValue;
+        } else {
+            target = 0;
         }
 
-        if (target_key_height < 3) {
-            target_key_height += (default_key_height-target_key_height) * smoothing_factor;
-        }
-        if (target_key_height > 10) {
-            target_key_height -= (target_key_height-default_key_height) * smoothing_factor;
-        }
-
-        key_height -= (key_height - target_key_height) * smoothing_factor;
-
-        float diff = key_height - target_key_height;
-        if (diff < 0.01 && diff > -0.01) {
-            key_height = target_key_height;
+        float diff = scroll_offset - target;
+        if (diff < 0.0005 && diff > -0.0005) {
+            scroll_offset = target;
         }
     }
 
     DrawRectangle(
         -scroll_offset, 
         0, 
-        tick_width * notes[notes_count-1].end_tick, // TODO: only considering notes are sorted
+        scroll_content_width,
         128 * key_height, 
         GRAY
     );
