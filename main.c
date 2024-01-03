@@ -1,5 +1,5 @@
 #include "raylib.h"
-
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -7,9 +7,9 @@
 #include <math.h>
 #include <time.h>
 
-const int FPS = 300;
-const int SCREEN_WIDTH = 1920;
-const int SCREEN_HEIGHT = 1080;
+const int FPS = 120;
+const int SCREEN_WIDTH = 800;
+const int SCREEN_HEIGHT = 800;
 
 struct Note {
     uint8_t key;
@@ -20,6 +20,7 @@ struct Note {
 
 struct Note notes[10000];
 uint32_t notes_count = 0;
+uint64_t interacting_button_id = 0;
 
 // for midi rendering
 void* data;
@@ -165,7 +166,7 @@ void write_data(const char* filename, void* data, uint64_t size) {
 
     fwrite(data, 1, size, file);
     fclose(file);
-    printf("Written %d bytes to %s.\n", size, filename);
+    printf("Written %llu bytes to %s.\n", size, filename);
 }
 
 double random_value() {
@@ -341,43 +342,55 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
 
     char text[100];
     sprintf(text, "Scroll offset: %f\nKey height: %fTick width: %f\nDraw count: %d", scroll_offset, key_height, tick_width, draw_count);
-    DrawText(text, 10, 10, 20, LIGHTGRAY);
+    DrawText(text, 10, 100, 20, LIGHTGRAY);
 }
 
-void DrawRandomizeButton(int view_x, int view_y, int view_width, int view_height) {
-    struct Rectangle frame = { view_x, view_y, view_width, view_height };
+bool DrawButton(Rectangle frame, char* title, uint64_t id) {
+    assert(id != 0);
+
+    bool is_interacting = interacting_button_id == id;
     bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
 
-    static bool is_interacting = false;
-    if (is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+    if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         is_interacting = true;
+        interacting_button_id = id;
     }
 
     Color background_color;
-    if (is_mouse_over && is_interacting)  background_color = YELLOW;
-    else if (is_mouse_over)  background_color = BLUE;
-    else if (is_interacting)  background_color = RED;
-    else  background_color = LIGHTGRAY;
+    Color title_color;
+    if (is_mouse_over && is_interacting) { // pressing down
+        background_color = CLITERAL(Color){ 130, 130, 130, 255 };
+        title_color = CLITERAL(Color){ 10, 10, 10, 255 };
+    } else if (is_mouse_over && interacting_button_id == 0) { // hover over
+        background_color = CLITERAL(Color){ 180, 180, 180, 255 };
+        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
+    } else if (is_interacting) { // interacting but pointer is outside
+        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
+        title_color = CLITERAL(Color){ 150, 150, 150, 255 };
+    } else { // idle
+        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
+        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
+    }
 
-    DrawRectangleRounded(frame, 5, 1, background_color);
+    DrawRectangleRounded(frame, 1.0, 10, background_color);
 
     int title_font_size = 20;
-    const char* title = "Generate";
     int text_width = MeasureText(title, title_font_size);
     DrawText(
         title,
-        view_x + view_width / 2 - text_width / 2,
-        view_y + view_height / 2 - title_font_size / 2,
+        frame.x + frame.width / 2 - text_width / 2,
+        frame.y + frame.height / 2 - title_font_size / 2,
         title_font_size,
-        DARKGRAY
+        title_color 
     );
 
-    if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        if (is_mouse_over && is_interacting) {
-            create_notes();
+    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        interacting_button_id = 0;
+        if (is_interacting && is_mouse_over) {
+            return true;
         }
-        is_interacting = false;
     }
+    return false;
 }
 
 int main() {
@@ -390,7 +403,7 @@ int main() {
         BeginDrawing();
             ClearBackground(DARKGRAY);
 
-            const int notes_panel_top_offset = 300;
+            const int notes_panel_top_offset = 200;
             DrawNotes(
                 0, 
                 notes_panel_top_offset,
@@ -398,16 +411,15 @@ int main() {
                 SCREEN_HEIGHT - notes_panel_top_offset
             );
 
-            const int randomize_button_top_offset = 50;
-            const int randomize_button_right_offset = 50;
-            const int randomize_button_width = 200;
-            const int randomize_button_height = 50;
-            DrawRandomizeButton(
-                SCREEN_WIDTH - randomize_button_width - randomize_button_right_offset,
-                randomize_button_top_offset,
-                randomize_button_width,
-                randomize_button_height
-            );
+            struct Rectangle generate_frame = (Rectangle) { SCREEN_WIDTH - 170, 20, 160, 40 };
+            if (DrawButton(generate_frame, "Generate", 1)) {
+                create_notes();
+            }
+
+            struct Rectangle export_frame = (Rectangle) { SCREEN_WIDTH - 340, 20, 160, 40 };
+            if (DrawButton(export_frame, "Export MIDI", 2)) {
+                printf("Exporting MIDI... soon...\n");
+            }
 
         EndDrawing();
     }
