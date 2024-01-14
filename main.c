@@ -418,7 +418,7 @@ int main() {
 
             struct Rectangle export_frame = (Rectangle) { SCREEN_WIDTH - 340, 20, 160, 40 };
             if (DrawButton(export_frame, "Export MIDI", 2)) {
-                printf("Exporting MIDI... soon...\n");
+                printf("Exporting MIDI... Look forward to it...\n");
             }
 
         EndDrawing();
