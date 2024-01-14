@@ -7,6 +7,7 @@
 #include <math.h>
 #include <time.h>
 
+#define NOTES_LIMIT 10000
 const int FPS = 120;
 const int SCREEN_WIDTH = 800;
 const int SCREEN_HEIGHT = 800;
@@ -18,13 +19,26 @@ struct Note {
     uint32_t end_tick;
 };
 
-struct Note notes[10000];
+struct NoteEvent {
+    uint8_t key;
+    uint8_t velocity;
+    uint32_t tick;
+    bool is_on;
+};
+
+// notes
+struct Note notes[NOTES_LIMIT];
 uint32_t notes_count = 0;
 uint64_t interacting_button_id = 0;
 
-// for midi rendering
+// midi rendering
 void* data;
 uint64_t size = 0;
+
+double random_value() {
+    double value = (double)GetRandomValue(0, 100000) / 100000;
+    return value;
+}
 
 uint32_t le_to_be(uint32_t num) {
     uint8_t b[4] = {0};
@@ -129,6 +143,45 @@ void append_header() {
     append_byte(0x60);
 }
 
+int compare_note_events(const void *a, const void *b) {
+    const struct NoteEvent *note1 = (const struct NoteEvent *)a;
+    const struct NoteEvent *note2 = (const struct NoteEvent *)b;
+    if (note1->tick < note2->tick) return -1;
+    else if (note1->tick > note2->tick) return 1;
+    else return 0;
+}
+
+void append_events_from_notes() {
+    int events_count = notes_count * 2;
+    struct NoteEvent events[events_count];
+
+    for (int i = 0; i < notes_count; i++) {
+        struct Note note = notes[i];
+        events[i] = (struct NoteEvent) {
+            note.key, note.velocity, note.start_tick, true
+        };
+        events[notes_count + i] = (struct NoteEvent) {
+            note.key, note.velocity, note.end_tick, false
+        };
+    }
+
+    qsort(events, events_count, sizeof(struct NoteEvent), compare_note_events);
+
+    uint32_t current_tick = 0;    
+    for (int i = 0; i < events_count; i++) {
+        struct NoteEvent event = events[i];
+
+        append_delta_time(event.tick - current_tick);
+        current_tick = event.tick;
+
+        if (event.is_on) {
+            append_note_on(event.key, event.velocity);
+        } else {
+            append_note_off(event.key, event.velocity);
+        }
+    }
+}
+
 void append_track_chunk() {
     append_string("MTrk");
 
@@ -142,7 +195,7 @@ void append_track_chunk() {
     uint64_t chunk_start = size;
 
     // track events
-    // remap them from notes
+    append_events_from_notes();
 
     // end of track meta event
     append_byte(0xff);
@@ -157,7 +210,12 @@ void append_track_chunk() {
 }
 
 void write_data(const char* filename, void* data, uint64_t size) {
-    FILE* file = fopen("1.mid", "wb");
+    if (size == 0) {
+        printf("Warning! There is no midi data to write to the file %s\n", filename);
+        return;
+    }
+
+    FILE* file = fopen(filename, "wb");
     
     if (file == NULL) {
         printf("Error opening file %s.\n", filename);
@@ -167,11 +225,6 @@ void write_data(const char* filename, void* data, uint64_t size) {
     fwrite(data, 1, size, file);
     fclose(file);
     printf("Written %llu bytes to %s.\n", size, filename);
-}
-
-double random_value() {
-    double value = (double)GetRandomValue(0, 100000) / 100000;
-    return value;
 }
 
 void create_notes() {
@@ -189,7 +242,7 @@ void create_notes() {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 10000; i++) {
+    for (double i = 0; i < 10; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 9 * random_value();
@@ -210,6 +263,17 @@ void create_notes() {
 
         current_tick += note_duration;
     }
+}
+
+void save_notes_midi_file() {
+    size = 0;
+    data = malloc(notes_count * sizeof(struct NoteEvent) + 100);
+
+    append_header();
+    append_track_chunk();
+    write_data("1.mid", data, size);
+
+    free(data);
 }
 
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
@@ -330,7 +394,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         struct Note note = notes[i];
 
         int posX = note.start_tick * tick_width - (int) scroll_offset;
-        int posY = note.key * key_height;
+        int posY = 400 - note.key * key_height;
         int width = (note.end_tick - note.start_tick) * tick_width;
         int height = key_height;
 
@@ -418,7 +482,7 @@ int main() {
 
             struct Rectangle export_frame = (Rectangle) { SCREEN_WIDTH - 340, 20, 160, 40 };
             if (DrawButton(export_frame, "Export MIDI", 2)) {
-                printf("Exporting MIDI... Look forward to it...\n");
+                save_notes_midi_file();
             }
 
         EndDrawing();
