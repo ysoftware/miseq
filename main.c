@@ -9,8 +9,8 @@
 
 #define NOTES_LIMIT 10000
 const int FPS = 120;
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 800;
+const int SCREEN_WIDTH = 2000;
+const int SCREEN_HEIGHT = 1200;
 
 struct Note {
     uint8_t key;
@@ -242,7 +242,7 @@ void create_notes() {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 10; i++) {
+    for (double i = 0; i < 512; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 9 * random_value();
@@ -277,9 +277,10 @@ void save_notes_midi_file() {
 }
 
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
+
     const float default_key_height = 6;
     const float default_scroll_offset = 0;
-    const float default_tick_width = 1;
+    const float default_tick_width = 0.5;
 
     static float scroll_offset = default_scroll_offset;
     static float key_height = default_key_height;
@@ -389,12 +390,13 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         GRAY
     );
 
+    if (notes_count == 0) return;
     int draw_count = 0;
     for (int i = 0; i < notes_count; i++) {
         struct Note note = notes[i];
 
         int posX = note.start_tick * tick_width - (int) scroll_offset;
-        int posY = 400 - note.key * key_height;
+        int posY = 128 * key_height - note.key * key_height;
         int width = (note.end_tick - note.start_tick) * tick_width;
         int height = key_height;
 
