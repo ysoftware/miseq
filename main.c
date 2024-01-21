@@ -1,4 +1,5 @@
 #include "raylib.h"
+#include "raymath.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -30,6 +31,8 @@ struct NoteEvent {
 struct Note notes[NOTES_LIMIT];
 uint32_t notes_count = 0;
 uint64_t interacting_button_id = 0;
+
+int console_lines_this_frame = 0;
 
 // midi rendering
 void* data;
@@ -276,6 +279,81 @@ void save_notes_midi_file() {
     free(data);
 }
 
+bool DrawButton(Rectangle frame, char* title, uint64_t id) {
+    assert(id != 0);
+
+    bool is_interacting = interacting_button_id == id;
+    bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
+
+    if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        is_interacting = true;
+        interacting_button_id = id;
+    }
+
+    Color background_color;
+    Color title_color;
+    if (is_mouse_over && is_interacting) { // pressing down
+        background_color = CLITERAL(Color){ 130, 130, 130, 255 };
+        title_color = CLITERAL(Color){ 10, 10, 10, 255 };
+    } else if (is_mouse_over && interacting_button_id == 0) { // hover over
+        background_color = CLITERAL(Color){ 180, 180, 180, 255 };
+        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
+    } else if (is_interacting) { // interacting but pointer is outside
+        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
+        title_color = CLITERAL(Color){ 150, 150, 150, 255 };
+    } else { // idle
+        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
+        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
+    }
+
+    DrawRectangleRounded(frame, 1.0, 10, background_color);
+
+    int title_font_size = 20;
+    int text_width = MeasureText(title, title_font_size);
+    DrawText(
+        title,
+        frame.x + frame.width / 2 - text_width / 2,
+        frame.y + frame.height / 2 - title_font_size / 2,
+        title_font_size,
+        title_color 
+    );
+
+    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        interacting_button_id = 0;
+        if (is_interacting && is_mouse_over) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void DrawConsoleLine(char* string) {
+    int console_width = 800;
+    int line_height = 25;
+    int console_top_offset = 10;
+
+    if (console_lines_this_frame == 0) {
+        DrawRectangle(
+            0,
+            0,
+            console_width,
+            console_top_offset,
+            BLACK 
+        );
+    }
+    
+    DrawRectangle(
+        0,
+        console_lines_this_frame * line_height + console_top_offset,
+        console_width,
+        line_height,
+        BLACK 
+    );
+
+    DrawText(string, 10, console_lines_this_frame * line_height + console_top_offset, 25, WHITE);
+    console_lines_this_frame += 1;
+}
+
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
 
     const float default_key_height = 6;
@@ -406,57 +484,35 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         }
     }
 
-    char text[100];
-    sprintf(text, "Scroll offset: %f\nKey height: %fTick width: %f\nDraw count: %d", scroll_offset, key_height, tick_width, draw_count);
-    DrawText(text, 10, 100, 20, LIGHTGRAY);
-}
+    // NOTE SELECTION
+    static bool is_selecting = false;
+    static Vector2 selection_start;
+    static Vector2 selection_end;
 
-bool DrawButton(Rectangle frame, char* title, uint64_t id) {
-    assert(id != 0);
-
-    bool is_interacting = interacting_button_id == id;
-    bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
-
-    if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        is_interacting = true;
-        interacting_button_id = id;
-    }
-
-    Color background_color;
-    Color title_color;
-    if (is_mouse_over && is_interacting) { // pressing down
-        background_color = CLITERAL(Color){ 130, 130, 130, 255 };
-        title_color = CLITERAL(Color){ 10, 10, 10, 255 };
-    } else if (is_mouse_over && interacting_button_id == 0) { // hover over
-        background_color = CLITERAL(Color){ 180, 180, 180, 255 };
-        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
-    } else if (is_interacting) { // interacting but pointer is outside
-        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
-        title_color = CLITERAL(Color){ 150, 150, 150, 255 };
-    } else { // idle
-        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
-        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
-    }
-
-    DrawRectangleRounded(frame, 1.0, 10, background_color);
-
-    int title_font_size = 20;
-    int text_width = MeasureText(title, title_font_size);
-    DrawText(
-        title,
-        frame.x + frame.width / 2 - text_width / 2,
-        frame.y + frame.height / 2 - title_font_size / 2,
-        title_font_size,
-        title_color 
-    );
-
-    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        interacting_button_id = 0;
-        if (is_interacting && is_mouse_over) {
-            return true;
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        // TODO: check if mouse in view bounds
+        if (!is_selecting) {
+            is_selecting = true;
+            selection_start = GetMousePosition();
         }
+        selection_end = GetMousePosition();
+    } else {
+        is_selecting = false;
     }
-    return false;
+
+    if (is_selecting) {
+        char text[50];
+        sprintf(text, "Start: %f, %f", selection_start.x, selection_start.y);
+        DrawConsoleLine((char*) text);
+
+        char text2[50];
+        sprintf(text2, "End: %f, %f", selection_end.x, selection_end.y);
+        DrawConsoleLine((char*) text2);
+
+        DrawConsoleLine("Selecting");
+
+        DrawRectangleV(selection_start, Vector2Subtract(selection_end, selection_start), BLUE);
+    }
 }
 
 int main() {
@@ -468,6 +524,7 @@ int main() {
     while(!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(DARKGRAY);
+            console_lines_this_frame = 0;
 
             const int notes_panel_top_offset = 200;
             DrawNotes(
