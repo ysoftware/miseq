@@ -1,6 +1,7 @@
 #include "raylib.h"
 #include "portaudio.h"
 
+#include "raymath.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -9,9 +10,10 @@
 #include <math.h>
 #include <time.h>
 
+#define NOTES_LIMIT 10000
 const int FPS = 120;
-const int SCREEN_WIDTH = 800;
-const int SCREEN_HEIGHT = 800;
+const int SCREEN_WIDTH = 1280;
+const int SCREEN_HEIGHT = 700;
 
 struct Note {
     uint8_t key;
@@ -20,16 +22,28 @@ struct Note {
     uint32_t end_tick;
 };
 
-// GLOBAL DATA
+struct NoteEvent {
+    uint8_t key;
+    uint8_t velocity;
+    uint32_t tick;
+    bool is_on;
+};
 
-struct Note notes[10000];
+// notes
+struct Note notes[NOTES_LIMIT];
 uint32_t notes_count = 0;
 uint64_t interacting_button_id = 0;
 
-void *data; // for midi rendering
+int console_lines_this_frame = 0;
+
+// midi rendering
+void* data;
 uint64_t size = 0;
 
-// UTILITIES
+double random_value() {
+    double value = (double)GetRandomValue(0, 100000) / 100000;
+    return value;
+}
 
 uint32_t le_to_be(uint32_t num) {
     uint8_t b[4] = {0};
@@ -136,6 +150,45 @@ void append_header() {
     append_byte(0x60);
 }
 
+int compare_note_events(const void *a, const void *b) {
+    const struct NoteEvent *note1 = (const struct NoteEvent *)a;
+    const struct NoteEvent *note2 = (const struct NoteEvent *)b;
+    if (note1->tick < note2->tick) return -1;
+    else if (note1->tick > note2->tick) return 1;
+    else return 0;
+}
+
+void append_events_from_notes() {
+    int events_count = notes_count * 2;
+    struct NoteEvent events[events_count];
+
+    for (int i = 0; i < notes_count; i++) {
+        struct Note note = notes[i];
+        events[i] = (struct NoteEvent) {
+            note.key, note.velocity, note.start_tick, true
+        };
+        events[notes_count + i] = (struct NoteEvent) {
+            note.key, note.velocity, note.end_tick, false
+        };
+    }
+
+    qsort(events, events_count, sizeof(struct NoteEvent), compare_note_events);
+
+    uint32_t current_tick = 0;    
+    for (int i = 0; i < events_count; i++) {
+        struct NoteEvent event = events[i];
+
+        append_delta_time(event.tick - current_tick);
+        current_tick = event.tick;
+
+        if (event.is_on) {
+            append_note_on(event.key, event.velocity);
+        } else {
+            append_note_off(event.key, event.velocity);
+        }
+    }
+}
+
 void append_track_chunk() {
     append_string("MTrk");
 
@@ -149,7 +202,7 @@ void append_track_chunk() {
     uint64_t chunk_start = size;
 
     // track events
-    // remap them from notes
+    append_events_from_notes();
 
     // end of track meta event
     append_byte(0xff);
@@ -164,7 +217,12 @@ void append_track_chunk() {
 }
 
 void write_data(const char* filename, void* data, uint64_t size) {
-    FILE* file = fopen("1.mid", "wb");
+    if (size == 0) {
+        printf("Warning! There is no midi data to write to the file %s\n", filename);
+        return;
+    }
+
+    FILE* file = fopen(filename, "wb");
     
     if (file == NULL) {
         printf("Error opening file %s.\n", filename);
@@ -174,11 +232,6 @@ void write_data(const char* filename, void* data, uint64_t size) {
     fwrite(data, 1, size, file);
     fclose(file);
     printf("Written %llu bytes to %s.\n", size, filename);
-}
-
-double random_value() {
-    double value = (double)GetRandomValue(0, 100000) / 100000;
-    return value;
 }
 
 void create_notes() {
@@ -196,7 +249,7 @@ void create_notes() {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 10000; i++) {
+    for (double i = 0; i < 512; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 9 * random_value();
@@ -219,12 +272,98 @@ void create_notes() {
     }
 }
 
+void save_notes_midi_file() {
+    size = 0;
+    data = malloc(notes_count * sizeof(struct NoteEvent) + 100);
+
+    append_header();
+    append_track_chunk();
+    write_data("1.mid", data, size);
+
+    free(data);
+}
+
 // USER INTERFACE
+
+bool DrawButtonRectangle(char* title, uint64_t id, Rectangle frame) {
+    assert(id != 0);
+
+    bool is_interacting = interacting_button_id == id;
+    bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
+
+    if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        is_interacting = true;
+        interacting_button_id = id;
+    }
+
+    Color background_color;
+    Color title_color;
+    if (is_mouse_over && is_interacting) { // pressing down
+        background_color = CLITERAL(Color){ 130, 130, 130, 255 };
+        title_color = CLITERAL(Color){ 10, 10, 10, 255 };
+    } else if (is_mouse_over && interacting_button_id == 0) { // hover over
+        background_color = CLITERAL(Color){ 180, 180, 180, 255 };
+        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
+    } else if (is_interacting) { // interacting but pointer is outside
+        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
+        title_color = CLITERAL(Color){ 150, 150, 150, 255 };
+    } else { // idle
+        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
+        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
+    }
+
+    DrawRectangleRounded(frame, 1.0, 10, background_color);
+
+    int title_font_size = 20;
+    int text_width = MeasureText(title, title_font_size);
+    DrawText(
+        title,
+        frame.x + frame.width / 2 - text_width / 2,
+        frame.y + frame.height / 2 - title_font_size / 2,
+        title_font_size,
+        title_color 
+    );
+
+    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        interacting_button_id = 0;
+        if (is_interacting && is_mouse_over) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void DrawConsoleLine(char* string) {
+    int console_width = 600;
+    int line_height = 25;
+    int console_top_offset = 10;
+
+    if (console_lines_this_frame == 0) {
+        DrawRectangle(
+            0,
+            0,
+            console_width,
+            console_top_offset,
+            BLACK 
+        );
+    }
+    
+    DrawRectangle(
+        0,
+        console_lines_this_frame * line_height + console_top_offset,
+        console_width,
+        line_height,
+        BLACK 
+    );
+
+    DrawText(string, 10, console_lines_this_frame * line_height + console_top_offset, 25, WHITE);
+    console_lines_this_frame += 1;
+}
 
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     const float default_key_height = 6;
     const float default_scroll_offset = 0;
-    const float default_tick_width = 1;
+    const float default_tick_width = 0.5;
 
     static float scroll_offset = default_scroll_offset;
     static float key_height = default_key_height;
@@ -334,12 +473,13 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         GRAY
     );
 
+    if (notes_count == 0) return;
     int draw_count = 0;
     for (int i = 0; i < notes_count; i++) {
         struct Note note = notes[i];
 
         int posX = note.start_tick * tick_width - (int) scroll_offset;
-        int posY = note.key * key_height;
+        int posY = 128 * key_height - note.key * key_height;
         int width = (note.end_tick - note.start_tick) * tick_width;
         int height = key_height;
 
@@ -349,57 +489,35 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         }
     }
 
-    char text[100];
-    sprintf(text, "Scroll offset: %f\nKey height: %fTick width: %f\nDraw count: %d", scroll_offset, key_height, tick_width, draw_count);
-    DrawText(text, 10, 100, 20, LIGHTGRAY);
-}
+    // NOTE SELECTION
+    static bool is_selecting = false;
+    static Vector2 selection_start;
+    static Vector2 selection_end;
 
-bool DrawButtonRectangle(char* title, uint64_t id, Rectangle frame) {
-    assert(id != 0);
-
-    bool is_interacting = interacting_button_id == id;
-    bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
-
-    if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        is_interacting = true;
-        interacting_button_id = id;
-    }
-
-    Color background_color;
-    Color title_color;
-    if (is_mouse_over && is_interacting) { // pressing down
-        background_color = CLITERAL(Color){ 130, 130, 130, 255 };
-        title_color = CLITERAL(Color){ 10, 10, 10, 255 };
-    } else if (is_mouse_over && interacting_button_id == 0) { // hover over
-        background_color = CLITERAL(Color){ 180, 180, 180, 255 };
-        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
-    } else if (is_interacting) { // interacting but pointer is outside
-        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
-        title_color = CLITERAL(Color){ 150, 150, 150, 255 };
-    } else { // idle
-        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
-        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
-    }
-
-    DrawRectangleRounded(frame, 1.0, 10, background_color);
-
-    int title_font_size = 20;
-    int text_width = MeasureText(title, title_font_size);
-    DrawText(
-        title,
-        frame.x + frame.width / 2 - text_width / 2,
-        frame.y + frame.height / 2 - title_font_size / 2,
-        title_font_size,
-        title_color 
-    );
-
-    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        interacting_button_id = 0;
-        if (is_interacting && is_mouse_over) {
-            return true;
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        // TODO: check if mouse in view bounds
+        if (!is_selecting) {
+            is_selecting = true;
+            selection_start = GetMousePosition();
         }
+        selection_end = GetMousePosition();
+    } else {
+        is_selecting = false;
     }
-    return false;
+
+    if (is_selecting) {
+        char text[50];
+        sprintf(text, "Start: %f, %f", selection_start.x, selection_start.y);
+        DrawConsoleLine((char*) text);
+
+        char text2[50];
+        sprintf(text2, "End: %f, %f", selection_end.x, selection_end.y);
+        DrawConsoleLine((char*) text2);
+
+        DrawConsoleLine("Selecting");
+
+        DrawRectangleV(selection_start, Vector2Subtract(selection_end, selection_start), BLUE);
+    }
 }
 
 bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
@@ -506,6 +624,7 @@ int main() {
     while(!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(DARKGRAY);
+            console_lines_this_frame = 0;
 
             const int notes_panel_top_offset = 200;
             DrawNotes(
@@ -520,7 +639,7 @@ int main() {
             }
 
             if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
-                printf("Exporting MIDI... soon...\n");
+                save_notes_midi_file();
             }
 
             if (DrawButton("Play", 3, SCREEN_WIDTH - 510, 20, 160, 40)) {
