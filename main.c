@@ -552,6 +552,8 @@ static int patestCallback(
     PaStreamCallbackFlags statusFlags, 
     void *userData
 ) {
+    printf("callback called\n");
+
     /* Cast data passed through stream to our structure. */
     paTestData *data = (paTestData*)userData; 
     float *out = (float*)outputBuffer;
@@ -579,39 +581,52 @@ int prepare_sound() {
 
     PaError err = Pa_Initialize();
     if (err != paNoError) {
-        printf("[ERROR] Could not initialize audio playback");
+        printf("[ERROR] Could not initialize audio: %s\n", Pa_GetErrorText(err));
         return err;
     }
 
-    PaStreamParameters outputParameters;
-    outputParameters.device           = Pa_GetDefaultOutputDevice();
-    outputParameters.channelCount     = 2;
-    outputParameters.sampleFormat     = paInt16;
-    outputParameters.suggestedLatency = Pa_GetDeviceInfo(outputParameters.device)->defaultLowOutputLatency;
-    outputParameters.hostApiSpecificStreamInfo = NULL;
-
     PaStream *stream;
-    err = Pa_OpenStream(
+    err = Pa_OpenDefaultStream(
         &stream,
-        NULL,
-        &outputParameters,
+        0,
+        2,
+        paFloat32,
         SAMPLE_RATE,
-        FRAMES_PER_BUFFER,
-        paClipOff,      /* we won't output out of range samples so don't bother clipping them */
+        256,
         patestCallback,
         &data
     );
-
     if (err != paNoError) {
-        printf("[ERROR] Could not open an audio stream.");
+        printf("[ERROR] Could not open audio stream: %s\n", Pa_GetErrorText(err));
         return err; 
     }
+
+    err = Pa_StartStream(stream);
+    if (err != paNoError) {
+        printf("[ERROR] Could not start audio stream: %s\n", Pa_GetErrorText(err));
+        return err; 
+    }
+
+    Pa_Sleep(3*1000);
+
+    err = Pa_StopStream(stream);
+    if (err != paNoError) {
+        printf("[ERROR] Could not start audio stream: %s\n", Pa_GetErrorText(err));
+        return err; 
+    }
+
+    err = Pa_Terminate();
+    if (err != paNoError) {
+        printf("PortAudio error: %s\n", Pa_GetErrorText(err));
+        return err;
+    }
+
+    printf("Playing sound...\n");
 
     return 0;
 }
 
 void play_midi() {
-    printf("Playing sound"); 
     prepare_sound();
 }
 
