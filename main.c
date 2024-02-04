@@ -1,4 +1,6 @@
 #include "raylib.h"
+#include "portaudio.h"
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -18,13 +20,16 @@ struct Note {
     uint32_t end_tick;
 };
 
+// GLOBAL DATA
+
 struct Note notes[10000];
 uint32_t notes_count = 0;
 uint64_t interacting_button_id = 0;
 
-// for midi rendering
-void* data;
+void *data; // for midi rendering
 uint64_t size = 0;
+
+// UTILITIES
 
 uint32_t le_to_be(uint32_t num) {
     uint8_t b[4] = {0};
@@ -64,6 +69,8 @@ void append_byte(int8_t byte) {
     memcpy(pointer, &byte, 1);
     size += 1;
 }
+
+// MIDI FORMAT
 
 void append_note_on(uint8_t key, uint8_t velocity) {
     uint64_t start = size;
@@ -212,6 +219,8 @@ void create_notes() {
     }
 }
 
+// USER INTERFACE
+
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     const float default_key_height = 6;
     const float default_scroll_offset = 0;
@@ -345,7 +354,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     DrawText(text, 10, 100, 20, LIGHTGRAY);
 }
 
-bool DrawButton(Rectangle frame, char* title, uint64_t id) {
+bool DrawButtonRectangle(char* title, uint64_t id, Rectangle frame) {
     assert(id != 0);
 
     bool is_interacting = interacting_button_id == id;
@@ -393,6 +402,101 @@ bool DrawButton(Rectangle frame, char* title, uint64_t id) {
     return false;
 }
 
+bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
+    return DrawButtonRectangle(title, id, ((Rectangle) { x, y, width, height }));
+}
+
+// AUDIO
+
+#define SAMPLE_RATE        (44100)
+#define FRAMES_PER_BUFFER  (512)
+#define LEFT_FREQ          (SAMPLE_RATE/256.0)  /* So we hit 1.0 */
+#define RIGHT_FREQ         (500.0)
+#define AMPLITUDE          (1.0)
+
+typedef short               SAMPLE_t;
+#define SAMPLE_ZERO         (0)
+#define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
+#define FORMAT_NAME         "Signed 16 Bit"
+
+typedef struct
+{
+    double left_phase;
+    double right_phase;
+}
+paTestData;
+
+static int patestCallback(
+    const void *inputBuffer, 
+    void *outputBuffer, 
+    unsigned long framesPerBuffer, 
+    const PaStreamCallbackTimeInfo* timeInfo, 
+    PaStreamCallbackFlags statusFlags, 
+    void *userData
+) {
+    /* Cast data passed through stream to our structure. */
+    paTestData *data = (paTestData*)userData; 
+    float *out = (float*)outputBuffer;
+    unsigned int i;
+    (void) inputBuffer; /* Prevent unused variable warning. */
+    
+    for( i=0; i<framesPerBuffer; i++ )
+    {
+        *out++ = data->left_phase;  /* left */
+        *out++ = data->right_phase;  /* right */
+        /* Generate simple sawtooth phaser that ranges between -1.0 and 1.0. */
+        data->left_phase += 0.01f;
+        /* When signal reaches top, drop back down. */
+        if( data->left_phase >= 1.0f ) data->left_phase -= 2.0f;
+        /* higher pitch so we can distinguish left and right. */
+        data->right_phase += 0.03f;
+        if( data->right_phase >= 1.0f ) data->right_phase -= 2.0f;
+    }
+    return 0;
+}
+
+int prepare_sound() {
+    paTestData data;
+    data.left_phase = data.right_phase = 0.0;
+
+    PaError err = Pa_Initialize();
+    if (err != paNoError) {
+        printf("[ERROR] Could not initialize audio playback");
+        return err;
+    }
+
+    PaStreamParameters outputParameters;
+    outputParameters.device           = Pa_GetDefaultOutputDevice();
+    outputParameters.channelCount     = 2;
+    outputParameters.sampleFormat     = paInt16;
+    outputParameters.suggestedLatency = Pa_GetDeviceInfo(outputParameters.device)->defaultLowOutputLatency;
+    outputParameters.hostApiSpecificStreamInfo = NULL;
+
+    PaStream *stream;
+    err = Pa_OpenStream(
+        &stream,
+        NULL,
+        &outputParameters,
+        SAMPLE_RATE,
+        FRAMES_PER_BUFFER,
+        paClipOff,      /* we won't output out of range samples so don't bother clipping them */
+        patestCallback,
+        &data
+    );
+
+    if (err != paNoError) {
+        printf("[ERROR] Could not open an audio stream.");
+        return err; 
+    }
+
+    return 0;
+}
+
+void play_midi() {
+    printf("Playing sound"); 
+    prepare_sound();
+}
+
 int main() {
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "miseq");
     SetTargetFPS(FPS);
@@ -411,14 +515,16 @@ int main() {
                 SCREEN_HEIGHT - notes_panel_top_offset
             );
 
-            struct Rectangle generate_frame = (Rectangle) { SCREEN_WIDTH - 170, 20, 160, 40 };
-            if (DrawButton(generate_frame, "Generate", 1)) {
+            if (DrawButton("Generate", 1, SCREEN_WIDTH - 170, 20, 160, 40)) {
                 create_notes();
             }
 
-            struct Rectangle export_frame = (Rectangle) { SCREEN_WIDTH - 340, 20, 160, 40 };
-            if (DrawButton(export_frame, "Export MIDI", 2)) {
+            if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
                 printf("Exporting MIDI... soon...\n");
+            }
+
+            if (DrawButton("Play", 3, SCREEN_WIDTH - 510, 20, 160, 40)) {
+                play_midi();
             }
 
         EndDrawing();
