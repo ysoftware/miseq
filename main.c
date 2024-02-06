@@ -526,11 +526,8 @@ bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
 
 // AUDIO
 
+#define A4_FREQUENCY        440
 #define SAMPLE_RATE        (44100)
-#define FRAMES_PER_BUFFER  (512)
-#define LEFT_FREQ          (SAMPLE_RATE/256.0)  /* So we hit 1.0 */
-#define RIGHT_FREQ         (500.0)
-#define AMPLITUDE          (1.0)
 
 typedef short               SAMPLE_t;
 #define SAMPLE_ZERO         (0)
@@ -539,8 +536,7 @@ typedef short               SAMPLE_t;
 
 typedef struct
 {
-    double left_phase;
-    double right_phase;
+    int frame_number;
 }
 paTestData;
 
@@ -552,32 +548,26 @@ static int patestCallback(
     PaStreamCallbackFlags statusFlags, 
     void *userData
 ) {
-    printf("callback called\n");
-
-    /* Cast data passed through stream to our structure. */
-    paTestData *data = (paTestData*)userData; 
+    paTestData *data = (paTestData*)userData;
     float *out = (float*)outputBuffer;
     unsigned int i;
-    (void) inputBuffer; /* Prevent unused variable warning. */
+    float phase;
     
-    for( i=0; i<framesPerBuffer; i++ )
-    {
-        *out++ = data->left_phase;  /* left */
-        *out++ = data->right_phase;  /* right */
-        /* Generate simple sawtooth phaser that ranges between -1.0 and 1.0. */
-        data->left_phase += 0.01f;
-        /* When signal reaches top, drop back down. */
-        if( data->left_phase >= 1.0f ) data->left_phase -= 2.0f;
-        /* higher pitch so we can distinguish left and right. */
-        data->right_phase += 0.03f;
-        if( data->right_phase >= 1.0f ) data->right_phase -= 2.0f;
+    int samples_per_cycle = SAMPLE_RATE / A4_FREQUENCY;
+
+    for (i=0; i<framesPerBuffer; i++) {
+        phase = sin(data->frame_number % samples_per_cycle / (float)samples_per_cycle * 2 * PI);
+
+        *out++ = phase; // left
+        *out++ = phase; // right
+
+        data->frame_number += 1;
     }
     return 0;
 }
 
 int prepare_sound() {
     paTestData data;
-    data.left_phase = data.right_phase = 0.0;
 
     PaError err = Pa_Initialize();
     if (err != paNoError) {
@@ -588,11 +578,11 @@ int prepare_sound() {
     PaStream *stream;
     err = Pa_OpenDefaultStream(
         &stream,
-        0,
-        2,
-        paFloat32,
+        0, // input channels
+        2, // output channels
+        paFloat32, // sample format
         SAMPLE_RATE,
-        256,
+        256, // frames per buffer
         patestCallback,
         &data
     );
@@ -607,7 +597,7 @@ int prepare_sound() {
         return err; 
     }
 
-    Pa_Sleep(3*1000);
+    Pa_Sleep(1*1000);
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
