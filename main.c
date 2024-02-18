@@ -40,6 +40,19 @@ int console_lines_this_frame = 0;
 void* data;
 uint64_t size = 0;
 
+// play sound debug
+
+typedef short               SAMPLE_t;
+#define A4_FREQUENCY        440
+#define SAMPLE_RATE        (44100)
+#define SAMPLE_ZERO         (0)
+#define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
+#define FORMAT_NAME         "Signed 16 Bit"
+
+float *debug_buffer = NULL;
+
+// utils
+
 double random_value() {
     double value = (double)GetRandomValue(0, 100000) / 100000;
     return value;
@@ -360,6 +373,33 @@ void DrawConsoleLine(char* string) {
     console_lines_this_frame += 1;
 }
 
+void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
+    DrawRectangle(
+        0, 
+        view_y,
+        SCREEN_WIDTH,
+        400, 
+        GRAY
+    );
+
+    for (int i = 0; i < 256; i++) {
+        float value = debug_buffer[i];
+
+        int posX = i * 4;
+        int posY = 400 - (200 - (int) (-1.0f * value * 200.0f));
+        int width = 4;
+        int height = 5;
+
+        if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
+            DrawRectangle(view_x + posX, view_y + posY, width, height, BLACK);
+        }
+    }
+
+    if (IsKeyPressed(KEY_W)) {
+        debug_buffer = NULL;
+    }
+}
+
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     const float default_key_height = 6;
     const float default_scroll_offset = 0;
@@ -526,21 +566,13 @@ bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
 
 // AUDIO
 
-#define A4_FREQUENCY        440
-#define SAMPLE_RATE        (44100)
-
-typedef short               SAMPLE_t;
-#define SAMPLE_ZERO         (0)
-#define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
-#define FORMAT_NAME         "Signed 16 Bit"
-
 typedef struct
 {
     int frame_number;
 }
-paTestData;
+portaudioUserData;
 
-static int patestCallback(
+static int portaudioCallback(
     const void *inputBuffer, 
     void *outputBuffer, 
     unsigned long framesPerBuffer, 
@@ -548,13 +580,13 @@ static int patestCallback(
     PaStreamCallbackFlags statusFlags, 
     void *userData
 ) {
-    paTestData *data = (paTestData*)userData;
+    portaudioUserData *data = (paTestData*)userData;
     float *out = (float*)outputBuffer;
-    unsigned int i;
-    float phase;
-    
+
     int samples_per_cycle = SAMPLE_RATE / A4_FREQUENCY;
 
+    unsigned int i;
+    float phase;
     for (i=0; i<framesPerBuffer; i++) {
         phase = sin(data->frame_number % samples_per_cycle / (float)samples_per_cycle * 2 * PI);
 
@@ -567,7 +599,7 @@ static int patestCallback(
 }
 
 int prepare_sound() {
-    paTestData data;
+    portaudioUserData data;
 
     PaError err = Pa_Initialize();
     if (err != paNoError) {
@@ -583,7 +615,7 @@ int prepare_sound() {
         paFloat32, // sample format
         SAMPLE_RATE,
         256, // frames per buffer
-        patestCallback,
+        portaudioCallback,
         &data
     );
     if (err != paNoError) {
@@ -618,6 +650,19 @@ int prepare_sound() {
 
 void play_midi() {
     prepare_sound();
+
+    // for debug we call portaudioCallback once and display the samples 
+    // until the user presses w on the keyboard
+    debug_buffer = malloc(512 * sizeof(float));
+    portaudioUserData data;
+    portaudioCallback(
+        NULL, 
+        (void*)debug_buffer, 
+        256,
+        NULL,
+        0,
+        &data
+    );
 }
 
 int main() {
@@ -632,12 +677,22 @@ int main() {
             console_lines_this_frame = 0;
 
             const int notes_panel_top_offset = 200;
-            DrawNotes(
-                0, 
-                notes_panel_top_offset,
-                SCREEN_WIDTH,
-                SCREEN_HEIGHT - notes_panel_top_offset
-            );
+            if (debug_buffer == NULL) {
+                DrawNotes(
+                    0, 
+                    notes_panel_top_offset,
+                    SCREEN_WIDTH,
+                    SCREEN_HEIGHT - notes_panel_top_offset
+                );
+            } 
+            else {
+                DrawDebugBuffer(
+                    0, 
+                    notes_panel_top_offset,
+                    SCREEN_WIDTH,
+                    SCREEN_HEIGHT - notes_panel_top_offset
+                );
+            }
 
             if (DrawButton("Generate", 1, SCREEN_WIDTH - 170, 20, 160, 40)) {
                 create_notes();
