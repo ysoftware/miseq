@@ -1,0 +1,6 @@
+D:/Documents/GitHub/miseq/portaudio-19.7.0/CMakeFiles/portaudio.dir
+D:/Documents/GitHub/miseq/portaudio-19.7.0/CMakeFiles/portaudio_static.dir
+D:/Documents/GitHub/miseq/portaudio-19.7.0/CMakeFiles/uninstall.dir
+D:/Documents/GitHub/miseq/portaudio-19.7.0/CMakeFiles/INSTALL.dir
+D:/Documents/GitHub/miseq/portaudio-19.7.0/CMakeFiles/ALL_BUILD.dir
+D:/Documents/GitHub/miseq/portaudio-19.7.0/CMakeFiles/ZERO_CHECK.dir

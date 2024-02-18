@@ -1,3 +1,5 @@
 *.exe
 *.app
 export.mid
+portaudio-19.7.0/x64/Release/*
+portaudio_x64.dll
