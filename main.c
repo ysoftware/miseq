@@ -378,17 +378,17 @@ void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
         0, 
         view_y,
         SCREEN_WIDTH,
-        400, 
+        200, 
         GRAY
     );
 
-    for (int i = 0; i < 256; i++) {
-        float value = debug_buffer[i];
+    for (int i = 0; i < 5 * 512; i++) {
+        float value = debug_buffer[i * 2];
 
-        int posX = i * 4;
-        int posY = 400 - (200 - (int) (-1.0f * value * 200.0f));
-        int width = 4;
-        int height = 5;
+        int posX = i * 1;
+        int posY = 200 - (100 - (int) (-1.0f * value * 100.0f));
+        int width = 1;
+        int height = 6;
 
         if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
             DrawRectangle(view_x + posX, view_y + posY, width, height, BLACK);
@@ -396,6 +396,7 @@ void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
     }
 
     if (IsKeyPressed(KEY_W)) {
+        free(debug_buffer);
         debug_buffer = NULL;
     }
 }
@@ -580,14 +581,18 @@ static int portaudioCallback(
     PaStreamCallbackFlags statusFlags, 
     void *userData
 ) {
-    portaudioUserData *data = (paTestData*)userData;
+    portaudioUserData *data = (portaudioUserData*)userData;
     float *out = (float*)outputBuffer;
-
-    int samples_per_cycle = SAMPLE_RATE / A4_FREQUENCY;
 
     unsigned int i;
     float phase;
     for (i=0; i<framesPerBuffer; i++) {
+        int freq = fmax(1, A4_FREQUENCY - (data->frame_number / 30));
+        assert(freq > 0);
+
+        int samples_per_cycle = SAMPLE_RATE / freq;
+        assert(samples_per_cycle > 0);
+
         phase = sin(data->frame_number % samples_per_cycle / (float)samples_per_cycle * 2 * PI);
 
         *out++ = phase; // left
@@ -629,7 +634,7 @@ int prepare_sound() {
         return err; 
     }
 
-    Pa_Sleep(1*1000);
+    Pa_Sleep(1*512);
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
@@ -653,16 +658,19 @@ void play_midi() {
 
     // for debug we call portaudioCallback once and display the samples 
     // until the user presses w on the keyboard
-    debug_buffer = malloc(512 * sizeof(float));
-    portaudioUserData data;
-    portaudioCallback(
-        NULL, 
-        (void*)debug_buffer, 
-        256,
-        NULL,
-        0,
-        &data
-    );
+    debug_buffer = malloc(512 * 5 * sizeof(float));
+    portaudioUserData data = {0};
+
+    for (int i = 0; i < 5; i++) {
+        portaudioCallback(
+            NULL, 
+            (void*)&debug_buffer[512 * i], 
+            256,
+            NULL,
+            0,
+            &data
+        );
+    }
 }
 
 int main() {
