@@ -21,7 +21,7 @@ build:
 		main.c -o miseq.app; \
 	echo "Build complete."
 
-else ifeq ($(shell uname -o),Msys) # Windows
+else ifeq ($(OS),Windows_NT) # Windows
 build:
 	gcc main.c \
 		-o miseq.exe \

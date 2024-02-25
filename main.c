@@ -12,8 +12,8 @@
 
 #define NOTES_LIMIT 10000
 const int FPS = 120;
-const int SCREEN_WIDTH = 1280;
-const int SCREEN_HEIGHT = 700;
+const int SCREEN_WIDTH = 2500;
+const int SCREEN_HEIGHT = 1000;
 
 struct Note {
     uint8_t key;
@@ -378,7 +378,7 @@ void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
         0, 
         view_y,
         SCREEN_WIDTH,
-        200, 
+        view_height, 
         GRAY
     );
 
@@ -386,9 +386,9 @@ void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
         float value = debug_buffer[i * 2];
 
         int posX = i * 1;
-        int posY = 200 - (100 - (int) (-1.0f * value * 100.0f));
-        int width = 1;
-        int height = 6;
+        int posY = view_height - (view_height/2 - (int) (-1.0f * value * view_height/2));
+        int width = 3;
+        int height = view_height / 50;
 
         if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
             DrawRectangle(view_x + posX, view_y + posY, width, height, BLACK);
@@ -570,8 +570,17 @@ bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
 typedef struct
 {
     int frame_number;
+    int transition_step;
+    int last_frequency;
 }
 portaudioUserData;
+
+float sweep(float f_start, float f_end, float interval, int i, int n_steps) {
+    float delta = i / (float)n_steps;
+    float t = interval * delta;
+    float phase = 2 * PI * t * (f_start + (f_end - f_start) * delta / 2);
+    return phase;
+}
 
 static int portaudioCallback(
     const void *inputBuffer, 
@@ -584,17 +593,54 @@ static int portaudioCallback(
     portaudioUserData *data = (portaudioUserData*)userData;
     float *out = (float*)outputBuffer;
 
+    int n_steps = 250;
+
     unsigned int i;
     float phase;
+    float t;
+
+    int freq = data->last_frequency;
+    int samples_per_cycle = SAMPLE_RATE / freq;
+
+    int old_freq = 0;
+    int old_samples_per_cycle;
+
     for (i=0; i<framesPerBuffer; i++) {
-        int freq = fmax(1, A4_FREQUENCY - (data->frame_number / 30));
-        assert(freq > 0);
 
-        int samples_per_cycle = SAMPLE_RATE / freq;
-        assert(samples_per_cycle > 0);
+        // set frequency (arbitrary)
+        if (data->frame_number % 500 == 0 && data->frame_number != 0) {
+            old_freq = freq;
+            freq--;
+            assert(freq > 0);
 
-        phase = sin(data->frame_number % samples_per_cycle / (float)samples_per_cycle * 2 * PI);
+            data->last_frequency = freq;
+            old_samples_per_cycle = samples_per_cycle;
+            data->transition_step = 0;
 
+            samples_per_cycle = SAMPLE_RATE / freq;
+            assert(samples_per_cycle > 0);
+        }
+
+        t = (float) data->frame_number / (float) samples_per_cycle * 2 * PI;
+
+        // transition
+        if (old_freq != 0) {
+            int steps_left = n_steps - data->transition_step;
+            float new_freq_weight = ((float) n_steps - (float) steps_left) / (float) n_steps;
+            t *= new_freq_weight;
+
+            float old_t = (float) data->frame_number / (float) old_samples_per_cycle * 2 * PI;
+
+            t = (t * new_freq_weight + old_t * (1 - new_freq_weight)) / 2;
+            data->transition_step += 1;
+
+            if (steps_left == 0) {
+                old_freq = 0;
+                data->transition_step = 0;
+            }
+        }
+
+        phase = sinf(t);
         *out++ = phase; // left
         *out++ = phase; // right
 
@@ -604,7 +650,7 @@ static int portaudioCallback(
 }
 
 int prepare_sound() {
-    portaudioUserData data;
+    portaudioUserData data = { 0, 0, A4_FREQUENCY };
 
     PaError err = Pa_Initialize();
     if (err != paNoError) {
@@ -634,7 +680,7 @@ int prepare_sound() {
         return err; 
     }
 
-    Pa_Sleep(1*512);
+    Pa_Sleep(2*512);
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
@@ -658,10 +704,10 @@ void play_midi() {
 
     // for debug we call portaudioCallback once and display the samples 
     // until the user presses w on the keyboard
-    debug_buffer = malloc(512 * 5 * sizeof(float));
-    portaudioUserData data = {0};
+    debug_buffer = malloc(512 * 10 * sizeof(float));
+    portaudioUserData data = { 0, 0, A4_FREQUENCY };
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 10; i++) {
         portaudioCallback(
             NULL, 
             (void*)&debug_buffer[512 * i], 
