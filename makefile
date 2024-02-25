@@ -1,6 +1,6 @@
-OS := $(shell uname)
+.SILENT: build
 
-ifeq ($(OS),Darwin)
+ifeq ($(shell uname),Darwin) # macOS
 build:
 	set -e 
 	clang \
@@ -21,7 +21,7 @@ build:
 		main.c -o miseq.app; \
 	echo "Build complete."
 
-else ifeq ($(OS),Windows_NT)
+else ifeq ($(shell uname -o),Msys) # Windows
 build:
 	gcc main.c \
 		-o miseq.exe \
@@ -30,17 +30,11 @@ build:
 		-Iportaudio-19.7.0/include \
 		-Lportaudio-19.7.0/Release -lportaudio_x64 \
 		-lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm; \
-	if ERRORLEVEL 1 \
-		echo Build failed. && \
-		exit /b 1 \
-	else \
-		echo Build complete. && \
-		exit /b 0 \
-	fi
+	echo Build complete. 
 
 else
 build:
-	@echo "Unsupported operating system."
+	@echo "Unsupported operating system:" $(OS)
 	@exit 1
 endif
 
