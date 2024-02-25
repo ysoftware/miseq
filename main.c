@@ -43,7 +43,8 @@ uint64_t size = 0;
 // play sound debug
 
 typedef short               SAMPLE_t;
-#define A4_FREQUENCY        440
+#define A4_FREQUENCY        700
+#define G3_FREQUENCY        196
 #define SAMPLE_RATE        (44100)
 #define SAMPLE_ZERO         (0)
 #define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
@@ -373,7 +374,7 @@ void DrawConsoleLine(char* string) {
     console_lines_this_frame += 1;
 }
 
-void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
+void DrawDebugBuffer(float view_x, float view_y, float view_width, float view_height) {
     DrawRectangle(
         0, 
         view_y,
@@ -382,16 +383,16 @@ void DrawDebugBuffer(int view_x, int view_y, int view_width, int view_height) {
         GRAY
     );
 
-    for (int i = 0; i < 5 * 512; i++) {
-        float value = debug_buffer[i * 2];
+    for (int i = 0; i < 50 * 512; i++) {
+        float value = debug_buffer[i];
 
-        int posX = i * 1;
-        int posY = view_height - (view_height/2 - (int) (-1.0f * value * view_height/2));
-        int width = 3;
-        int height = view_height / 50;
+        float posX = i * 0.33;
+        float posY = view_height - (view_height/2 - (-1.0f * value * view_height/2));
+        Vector2 position = { view_x + posX, view_y + posY };
+        Vector2 size = { 1, view_height / 50 };
 
-        if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
-            DrawRectangle(view_x + posX, view_y + posY, width, height, BLACK);
+        if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
+            DrawRectangleV(position, size, BLACK);
         }
     }
 
@@ -568,9 +569,11 @@ bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
 // AUDIO
 
 typedef struct {
+    int frequency1; // Frequency of wave 1
+    int frequency2; // Frequency of wave 2
     int frame_number;
-    float phase_accumulator;
-    int frequency;
+    float phase_accumulator1; // To keep track of the phase for wave 1
+    float phase_accumulator2; // To keep track of the phase for wave 2
 } portaudioUserData;
 
 static int portaudioCallback(
@@ -585,20 +588,35 @@ static int portaudioCallback(
     float *out = (float*)outputBuffer;
 
     for (unsigned int i = 0; i < framesPerBuffer; i++) {
-        if (data->frame_number % 50 == 0) {
-            data->frequency -= 1;
-            assert(data->frequency > 0);
+        if (data->frame_number % 150 == 0) {
+            data->frequency1 -= 1;
+            if (data->frequency1 == 0) data->frequency1 = 1000;
+        }
+        if (data->frame_number % 500 == 0) {
+            data->frequency2 += 1;
+            if (data->frequency2 == 0) data->frequency2 = 1; 
         }
 
-        float phase_increment = 2 * PI * data->frequency / SAMPLE_RATE;
+        // Calculate phase increments for each frequency
+        float phase_increment1 = 2 * PI * data->frequency1 / SAMPLE_RATE;
+        float phase_increment2 = 2 * PI * data->frequency2 / SAMPLE_RATE;
         
-        // Update the phase accumulator and ensure it's within the 0 to 2π range
-        data->phase_accumulator += phase_increment;
-        while (data->phase_accumulator > 2 * PI) data->phase_accumulator -= 2 * PI;
+        // Update phase accumulators and ensure they're within the 0 to 2π range
+        data->phase_accumulator1 += phase_increment1;
+        while (data->phase_accumulator1 > 2 * PI) data->phase_accumulator1 -= 2 * PI;
 
-        float sample = sinf(data->phase_accumulator);
-        *out++ = sample;
-        *out++ = sample;
+        data->phase_accumulator2 += phase_increment2;
+        while (data->phase_accumulator2 > 2 * PI) data->phase_accumulator2 -= 2 * PI;
+
+        // Generate sine wave output for each wave
+        float sample1 = sinf(data->phase_accumulator1);
+        float sample2 = sinf(data->phase_accumulator2);
+
+        // Mix the two waves
+        float mixedSample = (sample1 + sample2) / 2; // Simple average mixing
+
+        *out++ = mixedSample; // Left channel
+        *out++ = mixedSample; // Right channel
 
         data->frame_number++;
     }
@@ -606,7 +624,7 @@ static int portaudioCallback(
 }
 
 int prepare_sound() {
-    portaudioUserData data = { 0, 0, A4_FREQUENCY };
+    portaudioUserData data = { A4_FREQUENCY, G3_FREQUENCY, 0, 0, 1 };
 
     PaError err = Pa_Initialize();
     if (err != paNoError) {
@@ -636,7 +654,7 @@ int prepare_sound() {
         return err; 
     }
 
-    Pa_Sleep(3*512);
+    Pa_Sleep(4*512);
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
@@ -660,10 +678,10 @@ void play_midi() {
 
     // for debug we call portaudioCallback once and display the samples 
     // until the user presses w on the keyboard
-    debug_buffer = malloc(512 * 10 * sizeof(float));
-    portaudioUserData data = { 0, 0, A4_FREQUENCY };
+    debug_buffer = malloc(512 * 100 * sizeof(float));
+    portaudioUserData data = { A4_FREQUENCY, G3_FREQUENCY, 0, 0, 1 };
 
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 20; i++) {
         portaudioCallback(
             NULL, 
             (void*)&debug_buffer[512 * i], 
