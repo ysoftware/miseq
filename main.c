@@ -375,34 +375,6 @@ void DrawConsoleLine(char* string) {
     console_lines_this_frame += 1;
 }
 
-void DrawDebugBuffer(float view_x, float view_y, float view_width, float view_height) {
-    DrawRectangle(
-        0, 
-        view_y,
-        SCREEN_WIDTH,
-        view_height, 
-        GRAY
-    );
-
-    for (int i = 0; i < 50 * 512; i++) {
-        float value = debug_buffer[i];
-
-        float posX = i * 0.33;
-        float posY = view_height - (view_height/2 - (-1.0f * value * view_height/2));
-        Vector2 position = { view_x + posX, view_y + posY };
-        Vector2 size = { 1, view_height / 50 };
-
-        if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
-            DrawRectangleV(position, size, BLACK);
-        }
-    }
-
-    if (IsKeyPressed(KEY_W)) {
-        free(debug_buffer);
-        debug_buffer = NULL;
-    }
-}
-
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     const float default_key_height = 6;
     const float default_scroll_offset = 0;
@@ -574,49 +546,55 @@ static float midiNoteToFrequency(uint8_t note) {
 }
 
 typedef struct {
-    struct Note* notes; // Pointer to the array of notes
-    int total_notes; // Total number of notes in the sequence
-    uint32_t current_tick; // Current position in ticks
+    struct Note* notes;
+    int total_notes;
+    uint32_t current_tick;
+
     struct {
-        bool active; // Is the note currently being played?
-        float phase_accumulator; // Phase accumulator for the note
-        float frequency; // Frequency of the note
+        bool active;
+        bool is_releasing;
+        float phase_accumulator;
+        float frequency;
+        float attack;
     } active_notes[MAX_POLYPHONY];
 } portaudioUserData;
 
+// TODO: prerender the wave output and then return it to portaudio or save it to file
+
 static int portaudioCallback(
-    const void *inputBuffer, 
-    void *outputBuffer, 
-    unsigned long framesPerBuffer, 
-    const PaStreamCallbackTimeInfo* timeInfo, 
-    PaStreamCallbackFlags statusFlags, 
+    const void *inputBuffer,
+    void *outputBuffer,
+    unsigned long framesPerBuffer,
+    const PaStreamCallbackTimeInfo* timeInfo,
+    PaStreamCallbackFlags statusFlags,
     void *userData
 ) {
     portaudioUserData *data = (portaudioUserData*)userData;
     float *out = (float*)outputBuffer;
-    uint32_t frames_per_tick = SAMPLE_RATE / 100;
+    int frames_per_tick = 500;
 
     for (unsigned int frame = 0; frame < framesPerBuffer; frame++) {
         if (frame % frames_per_tick == 0) {
             data->current_tick++;
+
             // Check for note starts and stops
             for (int i = 0; i < data->total_notes; i++) {
                 struct Note note = data->notes[i];
+
                 if (data->current_tick == note.start_tick) {
-                    // Find an available slot in active_notes to start a new note
                     for (int j = 0; j < MAX_POLYPHONY; j++) {
                         if (!data->active_notes[j].active) {
                             data->active_notes[j].active = true;
+                            data->active_notes[j].is_releasing = false;
                             data->active_notes[j].frequency = midiNoteToFrequency(note.key);
-                            data->active_notes[j].phase_accumulator = 0.0f;
+                            data->active_notes[j].attack = 0.0f;
                             break;
                         }
                     }
                 } else if (data->current_tick == note.end_tick) {
-                    // Find the note in active_notes and deactivate it
                     for (int j = 0; j < MAX_POLYPHONY; j++) {
                         if (data->active_notes[j].active && data->active_notes[j].frequency == midiNoteToFrequency(note.key)) {
-                            data->active_notes[j].active = false;
+                            data->active_notes[j].is_releasing = true;
                             break;
                         }
                     }
@@ -630,15 +608,34 @@ static int portaudioCallback(
             if (data->active_notes[i].active) {
                 float phase_increment = 2 * PI * data->active_notes[i].frequency / SAMPLE_RATE;
                 data->active_notes[i].phase_accumulator += phase_increment;
+
+                // TODO: not sure what this is
                 while (data->active_notes[i].phase_accumulator > 2 * PI) {
                     data->active_notes[i].phase_accumulator -= 2 * PI;
                 }
-                mixedSample += sinf(data->active_notes[i].phase_accumulator) / MAX_POLYPHONY; // Simple mixing
+
+                float wave_value = sinf(data->active_notes[i].phase_accumulator);
+
+                if (data->active_notes[i].is_releasing) {
+                    data->active_notes[i].attack -= 0.0001f; // release speed
+
+                    if (data->active_notes[i].attack <= 0.0f) {
+                        data->active_notes[i].active = false;
+                    }
+                } else {
+                    data->active_notes[i].attack += 0.001f; // attack speed
+                    if (data->active_notes[i].attack > 1.0f) {
+                        data->active_notes[i].attack = 1.0f;
+                    }
+                }
+
+                wave_value *= data->active_notes[i].attack;
+                mixedSample += wave_value / MAX_POLYPHONY;
             }
         }
         
-        *out++ = mixedSample; // Left channel
-        *out++ = mixedSample; // Right channel
+        *out++ = mixedSample; // left
+        *out++ = mixedSample; // right
     }
 
     return paContinue;
@@ -665,7 +662,7 @@ int prepare_sound() {
         2, // output channels
         paFloat32, // sample format
         SAMPLE_RATE,
-        256, // frames per buffer
+        1024, // frames per buffer
         portaudioCallback,
         &data
     );
@@ -680,7 +677,7 @@ int prepare_sound() {
         return err; 
     }
 
-    Pa_Sleep(50*512);
+    Pa_Sleep(1024*15);
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
@@ -699,24 +696,56 @@ int prepare_sound() {
     return 0;
 }
 
+void DrawDebugBuffer(float view_x, float view_y, float view_width, float view_height) {
+    DrawRectangle(
+        0, 
+        view_y,
+        SCREEN_WIDTH,
+        view_height, 
+        GRAY
+    );
+
+    for (int i = 0; i < 1000 * 512; i++) {
+        float value = debug_buffer[i * 6];
+
+        float posX = i * 0.2;
+        float posY = view_height - (view_height/2 - (-1.0f * value * view_height/2));
+        Vector2 position = { view_x + posX, view_y + posY };
+        Vector2 size = { 1, view_height / 50 };
+
+        if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
+            DrawRectangleV(position, size, BLACK);
+        }
+    }
+
+    if (IsKeyPressed(KEY_W)) {
+        free(debug_buffer);
+        debug_buffer = NULL;
+    }
+}
+
 void play_midi() {
     prepare_sound();
 
-    // for debug we call portaudioCallback once and display the samples 
-    // until the user presses w on the keyboard
-    /* debug_buffer = malloc(512 * 100 * sizeof(float)); */
-    /* portaudioUserData data = { A4_FREQUENCY, G3_FREQUENCY, 0, 0, 1 }; */
+    // for debug we call portaudioCallback and display the samples until the user presses w on the keyboard
+    debug_buffer = malloc(512 * 100000 * sizeof(float));
+    portaudioUserData data = {
+        notes,
+        notes_count,
+        0, // current tick
+        0
+    };
 
-    /* for (int i = 0; i < 20; i++) { */
-    /*     portaudioCallback( */
-    /*         NULL, */ 
-    /*         (void*)&debug_buffer[512 * i], */ 
-    /*         256, */
-    /*         NULL, */
-    /*         0, */
-    /*         &data */
-    /*     ); */
-    /* } */
+    for (int i = 0; i < 10000; i++) {
+        portaudioCallback(
+            NULL, 
+            (void*)&debug_buffer[512 * i], 
+            256,
+            NULL,
+            0,
+            &data
+        );
+    }
 }
 
 int main() {
