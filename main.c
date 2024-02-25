@@ -560,6 +560,10 @@ typedef struct {
 } portaudioUserData;
 
 // TODO: prerender the wave output and then return it to portaudio or save it to file
+// TODO: extract midi code to midi.h
+// TODO: use miniaudio to play .wav, do it non-ui-blocking 
+// TODO: link audio lib statically
+// TODO: export .wav in wav.h
 
 static int portaudioCallback(
     const void *inputBuffer,
