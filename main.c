@@ -567,20 +567,11 @@ bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
 
 // AUDIO
 
-typedef struct
-{
+typedef struct {
     int frame_number;
-    int transition_step;
-    int last_frequency;
-}
-portaudioUserData;
-
-float sweep(float f_start, float f_end, float interval, int i, int n_steps) {
-    float delta = i / (float)n_steps;
-    float t = interval * delta;
-    float phase = 2 * PI * t * (f_start + (f_end - f_start) * delta / 2);
-    return phase;
-}
+    float phase_accumulator;
+    int frequency;
+} portaudioUserData;
 
 static int portaudioCallback(
     const void *inputBuffer, 
@@ -593,60 +584,25 @@ static int portaudioCallback(
     portaudioUserData *data = (portaudioUserData*)userData;
     float *out = (float*)outputBuffer;
 
-    int n_steps = 250;
-
-    unsigned int i;
-    float phase;
-    float t;
-
-    int freq = data->last_frequency;
-    int samples_per_cycle = SAMPLE_RATE / freq;
-
-    int old_freq = 0;
-    int old_samples_per_cycle;
-
-    for (i=0; i<framesPerBuffer; i++) {
-
-        // set frequency (arbitrary)
-        if (data->frame_number % 500 == 0 && data->frame_number != 0) {
-            old_freq = freq;
-            freq--;
-            assert(freq > 0);
-
-            data->last_frequency = freq;
-            old_samples_per_cycle = samples_per_cycle;
-            data->transition_step = 0;
-
-            samples_per_cycle = SAMPLE_RATE / freq;
-            assert(samples_per_cycle > 0);
+    for (unsigned int i = 0; i < framesPerBuffer; i++) {
+        if (data->frame_number % 50 == 0) {
+            data->frequency -= 1;
+            assert(data->frequency > 0);
         }
 
-        t = (float) data->frame_number / (float) samples_per_cycle * 2 * PI;
+        float phase_increment = 2 * PI * data->frequency / SAMPLE_RATE;
+        
+        // Update the phase accumulator and ensure it's within the 0 to 2π range
+        data->phase_accumulator += phase_increment;
+        while (data->phase_accumulator > 2 * PI) data->phase_accumulator -= 2 * PI;
 
-        // transition
-        if (old_freq != 0) {
-            int steps_left = n_steps - data->transition_step;
-            float new_freq_weight = ((float) n_steps - (float) steps_left) / (float) n_steps;
-            t *= new_freq_weight;
+        float sample = sinf(data->phase_accumulator);
+        *out++ = sample;
+        *out++ = sample;
 
-            float old_t = (float) data->frame_number / (float) old_samples_per_cycle * 2 * PI;
-
-            t = (t * new_freq_weight + old_t * (1 - new_freq_weight)) / 2;
-            data->transition_step += 1;
-
-            if (steps_left == 0) {
-                old_freq = 0;
-                data->transition_step = 0;
-            }
-        }
-
-        phase = sinf(t);
-        *out++ = phase; // left
-        *out++ = phase; // right
-
-        data->frame_number += 1;
+        data->frame_number++;
     }
-    return 0;
+    return paContinue;
 }
 
 int prepare_sound() {
@@ -680,7 +636,7 @@ int prepare_sound() {
         return err; 
     }
 
-    Pa_Sleep(2*512);
+    Pa_Sleep(3*512);
 
     err = Pa_StopStream(stream);
     if (err != paNoError) {
