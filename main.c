@@ -1,7 +1,7 @@
 #include "raylib.h"
 #include "portaudio.h"
-
 #include "raymath.h"
+
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -10,35 +10,19 @@
 #include <math.h>
 #include <time.h>
 
+#include "midi.h"
+
 #define NOTES_LIMIT 10000
 const int FPS = 120;
 const int SCREEN_WIDTH = 2500;
 const int SCREEN_HEIGHT = 1000;
 
-struct Note {
-    uint8_t key;
-    uint8_t velocity;
-    uint32_t start_tick;
-    uint32_t end_tick;
-};
-
-struct NoteEvent {
-    uint8_t key;
-    uint8_t velocity;
-    uint32_t tick;
-    bool is_on;
-};
-
 // notes
 struct Note notes[NOTES_LIMIT];
-uint32_t notes_count = 0;
-uint64_t interacting_button_id = 0;
+int notes_count = 0;
+int interacting_button_id = 0;
 
 int console_lines_this_frame = 0;
-
-// midi rendering
-void* data;
-uint64_t size = 0;
 
 // play sound debug
 
@@ -60,201 +44,11 @@ double random_value() {
     return value;
 }
 
-uint32_t le_to_be(uint32_t num) {
-    uint8_t b[4] = {0};
-    *(uint32_t*)b = num;
-    uint8_t tmp = 0;
-    tmp = b[0];
-    b[0] = b[3];
-    b[3] = tmp;
-    tmp = b[1];
-    b[1] = b[2];
-    b[2] = tmp;
-    return *(uint32_t*)b;
-}
-
-void print_hex(const void* data, uint64_t size) {
-    const uint8_t* bytes = (const uint8_t*)data;
-
-    for (uint64_t i = 0; i < size; ++i) {
-        printf("%02X ", bytes[i]);
-
-        if (i % 10 == 9 && i + 1 < size) {
-            printf("\n");
-        }
-    }
-    printf("\n");
-}
-
-void append_string(const char* bytes) {
-    char* pointer = (char*)data + size;
-    uint64_t len = strlen(bytes);
-    memcpy(pointer, bytes, len);
-    size += len;
-}
-
-void append_byte(int8_t byte) {
-    int8_t* pointer = (int8_t*)data + size;
-    memcpy(pointer, &byte, 1);
-    size += 1;
-}
-
-// MIDI FORMAT
-
-void append_note_on(uint8_t key, uint8_t velocity) {
-    uint64_t start = size;
-    
-    append_byte(0x90); // channel 0
-    append_byte(key);
-    append_byte(velocity);
-}
-
-void append_note_off(uint8_t key, uint8_t velocity) {
-    uint64_t start = size;
-    
-    append_byte(0x80); // channel 0
-    append_byte(key);
-    append_byte(velocity);
-}
-
-void append_delta_time(uint32_t ticks) {
-    uint64_t start = size;
-
-    if (ticks <= 127) {
-        append_byte((uint8_t) ticks);
-    } else { // VLQ format
-        uint32_t ticks_left = ticks;
-        uint8_t buffer[5]; // maximum 5 bytes for a 32-bit number
-        int count = 0;
-
-        while (ticks_left > 0) {
-            buffer[count++] = (uint8_t)(ticks_left & 0x7F);
-            ticks_left >>= 7;
-        }
-
-        // reverse the order of bytes and set the MSB to 1 for all but the last byte
-        for (int i = count - 1; i >= 0; --i) {
-            uint8_t byte = buffer[i];
-            if (i != 0) {
-                byte |= 0x80; // set MSB to 1 for continuation
-            }
-            append_byte(byte);
-        }
-    }
-}
-
-void append_header() {
-    append_string("MThd");
-
-    // chunk length (4 bytes): header is always 6
-    append_byte(0);
-    append_byte(0);
-    append_byte(0);
-    append_byte(6);
-
-    // format type (2 bytes): 0 single, 1 multi synced, 2 multi independent
-    append_byte(0);
-    append_byte(0);
-
-    // number of tracks (2 bytes)
-    append_byte(0);
-    append_byte(1);
-
-    // timing resolution (2 bytes)
-    append_byte(0x00);
-    append_byte(0x60);
-}
-
-int compare_note_events(const void *a, const void *b) {
-    const struct NoteEvent *note1 = (const struct NoteEvent *)a;
-    const struct NoteEvent *note2 = (const struct NoteEvent *)b;
-    if (note1->tick < note2->tick) return -1;
-    else if (note1->tick > note2->tick) return 1;
-    else return 0;
-}
-
-void append_events_from_notes() {
-    int events_count = notes_count * 2;
-    struct NoteEvent events[events_count];
-
-    for (int i = 0; i < notes_count; i++) {
-        struct Note note = notes[i];
-        events[i] = (struct NoteEvent) {
-            note.key, note.velocity, note.start_tick, true
-        };
-        events[notes_count + i] = (struct NoteEvent) {
-            note.key, note.velocity, note.end_tick, false
-        };
-    }
-
-    qsort(events, events_count, sizeof(struct NoteEvent), compare_note_events);
-
-    uint32_t current_tick = 0;    
-    for (int i = 0; i < events_count; i++) {
-        struct NoteEvent event = events[i];
-
-        append_delta_time(event.tick - current_tick);
-        current_tick = event.tick;
-
-        if (event.is_on) {
-            append_note_on(event.key, event.velocity);
-        } else {
-            append_note_off(event.key, event.velocity);
-        }
-    }
-}
-
-void append_track_chunk() {
-    append_string("MTrk");
-
-    // reserve chunk length (4 bytes) to set later
-    uint64_t length_position = size;
-    append_byte(0);
-    append_byte(0);
-    append_byte(0);
-    append_byte(0);
-
-    uint64_t chunk_start = size;
-
-    // track events
-    append_events_from_notes();
-
-    // end of track meta event
-    append_byte(0xff);
-    append_byte(0x2f);
-    append_byte(0);
-
-    // finally set chunk length
-    uint8_t* pointer = (uint8_t*)data + length_position;
-    uint32_t length_value = (uint32_t) (size - chunk_start);
-    uint32_t value = le_to_be(length_value);
-    memcpy((uint64_t*)pointer, &value, 4);
-}
-
-void write_data(const char* filename, void* data, uint64_t size) {
-    if (size == 0) {
-        printf("Warning! There is no midi data to write to the file %s\n", filename);
-        return;
-    }
-
-    FILE* file = fopen(filename, "wb");
-    
-    if (file == NULL) {
-        printf("Error opening file %s.\n", filename);
-        return;
-    }
-
-    fwrite(data, 1, size, file);
-    fclose(file);
-    printf("Written %llu bytes to %s.\n", size, filename);
-}
-
 void create_notes() {
     srand(time(NULL));
     notes_count = 0;
 
     uint32_t current_tick = 0;
-    uint32_t note_duration = 60;
 
     double base_velocity = 80;
     double base_key = 64;
@@ -287,20 +81,9 @@ void create_notes() {
     }
 }
 
-void save_notes_midi_file() {
-    size = 0;
-    data = malloc(notes_count * sizeof(struct NoteEvent) + 100);
-
-    append_header();
-    append_track_chunk();
-    write_data("1.mid", data, size);
-
-    free(data);
-}
-
 // USER INTERFACE
 
-bool DrawButtonRectangle(char* title, uint64_t id, Rectangle frame) {
+bool DrawButtonRectangle(char* title, int id, Rectangle frame) {
     assert(id != 0);
 
     bool is_interacting = interacting_button_id == id;
@@ -535,7 +318,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     }
 }
 
-bool DrawButton(char* title, uint64_t id, int x, int y, int width, int height) {
+bool DrawButton(char* title, int id, int x, int y, int width, int height) {
     return DrawButtonRectangle(title, id, ((Rectangle) { x, y, width, height }));
 }
 
@@ -547,7 +330,7 @@ static float midiNoteToFrequency(uint8_t note) {
 
 typedef struct {
     struct Note* notes;
-    int total_notes;
+    int notes_count;
     uint32_t current_tick;
 
     struct {
@@ -560,7 +343,6 @@ typedef struct {
 } portaudioUserData;
 
 // TODO: prerender the wave output and then return it to portaudio or save it to file
-// TODO: extract midi code to midi.h
 // TODO: use miniaudio to play .wav, do it non-ui-blocking 
 // TODO: link audio lib statically
 // TODO: export .wav in wav.h
@@ -573,6 +355,10 @@ static int portaudioCallback(
     PaStreamCallbackFlags statusFlags,
     void *userData
 ) {
+    (void)inputBuffer;
+    (void)timeInfo;
+    (void)statusFlags;
+
     portaudioUserData *data = (portaudioUserData*)userData;
     float *out = (float*)outputBuffer;
     int frames_per_tick = 500;
@@ -582,7 +368,7 @@ static int portaudioCallback(
             data->current_tick++;
 
             // Check for note starts and stops
-            for (int i = 0; i < data->total_notes; i++) {
+            for (int i = 0; i < data->notes_count; i++) {
                 struct Note note = data->notes[i];
 
                 if (data->current_tick == note.start_tick) {
@@ -621,7 +407,7 @@ static int portaudioCallback(
                 float wave_value = sinf(data->active_notes[i].phase_accumulator);
 
                 if (data->active_notes[i].is_releasing) {
-                    data->active_notes[i].attack -= 0.0001f; // release speed
+                    data->active_notes[i].attack -= 0.001f; // release speed
 
                     if (data->active_notes[i].attack <= 0.0f) {
                         data->active_notes[i].active = false;
@@ -647,10 +433,10 @@ static int portaudioCallback(
 
 int prepare_sound() {
     portaudioUserData data = {
-        notes,
-        notes_count,
-        0, // current tick
-        0
+        .notes = notes,
+        .notes_count = notes_count,
+        .current_tick = 0,
+        .active_notes = { }
     };
 
     PaError err = Pa_Initialize();
@@ -734,10 +520,10 @@ void play_midi() {
     // for debug we call portaudioCallback and display the samples until the user presses w on the keyboard
     debug_buffer = malloc(512 * 100000 * sizeof(float));
     portaudioUserData data = {
-        notes,
-        notes_count,
-        0, // current tick
-        0
+        .notes = notes,
+        .notes_count = notes_count,
+        .current_tick = 0,
+        .active_notes = { }
     };
 
     for (int i = 0; i < 10000; i++) {
@@ -786,7 +572,7 @@ int main() {
             }
 
             if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
-                save_notes_midi_file();
+                save_notes_midi_file(notes, notes_count);
             }
 
             if (DrawButton("Play", 3, SCREEN_WIDTH - 510, 20, 160, 40)) {

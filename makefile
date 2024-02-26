@@ -11,7 +11,10 @@ endif
 # Build Command
 build:
 ifeq ($(detected_OS),Windows)
-	gcc main.c \
+	gcc  -Wall -Wextra \
+		main.c \
+		midi.c \
+		-std=c99 \
 		-o miseq.exe \
 		-Iraylib-5.0_win/include \
 		-Lraylib-5.0_win/lib -lraylib \
@@ -34,7 +37,9 @@ else ifeq ($(detected_OS),Darwin)
 		-framework Cocoa \
 		-framework GLUT \
 		-framework OpenGL \
-		main.c -o miseq.app
+		main.c \
+		midi.c \
+		-o miseq.app
 else
 	@echo "Unsupported operating system."
 	@exit 1
