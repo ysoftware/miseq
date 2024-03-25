@@ -98,8 +98,9 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     }
 
     float key_height = scroll_zoom_state.zoom_y * 12;
-    float tick_width = scroll_zoom_state.zoom_x * 1;
+    float tick_width = scroll_zoom_state.zoom_x * 2;
     float content_size = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
 
     // for the next frame
@@ -147,6 +148,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     }
 
     if (is_selecting) {
+        // TODO: Bug: not all possible quarters are drawn
         DrawRectangleV(selection_start, Vector2Subtract(selection_end, selection_start), BLUE);
 
         // debug console printout
