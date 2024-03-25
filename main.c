@@ -11,6 +11,7 @@
 #include <time.h>
 
 #include "midi.h"
+#include "ui.h"
 
 #define NOTES_LIMIT 10000
 const int FPS = 120;
@@ -20,9 +21,6 @@ const int SCREEN_HEIGHT = 1000;
 // notes
 struct Note notes[NOTES_LIMIT];
 int notes_count = 0;
-int interacting_button_id = 0;
-
-int console_lines_this_frame = 0;
 
 // play sound debug
 
@@ -58,7 +56,7 @@ void create_notes() {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 512; i++) {
+    for (double i = 0; i < 200; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 9 * random_value();
@@ -83,190 +81,35 @@ void create_notes() {
 
 // USER INTERFACE
 
-bool DrawButtonRectangle(char* title, int id, Rectangle frame) {
-    assert(id != 0);
-
-    bool is_interacting = interacting_button_id == id;
-    bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
-
-    if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        is_interacting = true;
-        interacting_button_id = id;
-    }
-
-    Color background_color;
-    Color title_color;
-    if (is_mouse_over && is_interacting) { // pressing down
-        background_color = CLITERAL(Color){ 130, 130, 130, 255 };
-        title_color = CLITERAL(Color){ 10, 10, 10, 255 };
-    } else if (is_mouse_over && interacting_button_id == 0) { // hover over
-        background_color = CLITERAL(Color){ 180, 180, 180, 255 };
-        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
-    } else if (is_interacting) { // interacting but pointer is outside
-        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
-        title_color = CLITERAL(Color){ 150, 150, 150, 255 };
-    } else { // idle
-        background_color = CLITERAL(Color){ 200, 200, 200, 255 };
-        title_color = CLITERAL(Color){ 50, 50, 50, 255 };
-    }
-
-    DrawRectangleRounded(frame, 1.0, 10, background_color);
-
-    int title_font_size = 20;
-    int text_width = MeasureText(title, title_font_size);
-    DrawText(
-        title,
-        frame.x + frame.width / 2 - text_width / 2,
-        frame.y + frame.height / 2 - title_font_size / 2,
-        title_font_size,
-        title_color 
-    );
-
-    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        interacting_button_id = 0;
-        if (is_interacting && is_mouse_over) {
-            return true;
-        }
-    }
-    return false;
-}
-
-void DrawConsoleLine(char* string) {
-    int console_width = 600;
-    int line_height = 25;
-    int console_top_offset = 10;
-
-    if (console_lines_this_frame == 0) {
-        DrawRectangle(
-            0,
-            0,
-            console_width,
-            console_top_offset,
-            BLACK 
-        );
-    }
-    
-    DrawRectangle(
-        0,
-        console_lines_this_frame * line_height + console_top_offset,
-        console_width,
-        line_height,
-        BLACK 
-    );
-
-    DrawText(string, 10, console_lines_this_frame * line_height + console_top_offset, 25, WHITE);
-    console_lines_this_frame += 1;
-}
-
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
-    const float default_key_height = 6;
-    const float default_scroll_offset = 0;
-    const float default_tick_width = 0.5;
+    static struct ScrollZoom scroll_zoom_state = {
+        .zoom_x = 0.5f,
+        .zoom_y = 0.5f,
+        .target_zoom_x = 0.5f,
+        .target_zoom_y = 0.5f
+    };
 
-    static float scroll_offset = default_scroll_offset;
-    static float key_height = default_key_height;
-    static float tick_width = default_tick_width;
-
-    double smoothing_factor = GetFrameTime() * 10;
-    float scroll_content_width = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
-    float adjust_scroll_offset_after_scaling = 0;
-
-    // SCALE WIDTH
-    {
-        static float target = default_tick_width;
-        const float minValue = 0.1;
-        const float maxValue = 8;
-
-        if (IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT)) {
-            target += GetMouseWheelMove() * 0.05;
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-                target = default_tick_width;
-            }
-        }
-
-        float change = (tick_width - target) * smoothing_factor;
-        tick_width -= change;
-
-        if (change != 0) {
-            float preceding_ticks = (scroll_offset + view_width / 2) / tick_width;
-            adjust_scroll_offset_after_scaling -= preceding_ticks * change;
-        }
-
-        if (target < minValue)  target = minValue;
-        else if (target > maxValue)  target = maxValue;
-
-        float diff = tick_width - target;
-        if (diff < 0.0005 && diff > -0.0005) {
-            tick_width = target;
-        }
+    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+        scroll_zoom_state.target_zoom_x = 0.5f;
+        scroll_zoom_state.target_zoom_y = 0.5f;
+        scroll_zoom_state.target_scroll = 0;
+    } else {
+        process_scroll_interaction(&scroll_zoom_state);
     }
 
-    // SCALE HEIGHT
-    {
-        static float target = default_key_height;
-        const float minValue = 4;
-        const float maxValue = 12;
+    float key_height = scroll_zoom_state.zoom_y * 12;
+    float tick_width = scroll_zoom_state.zoom_x * 1;
+    float content_size = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
 
-        if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT)) {
-            target += GetMouseWheelMove() * 1;
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-                target = default_key_height;
-            }
-        }
-
-        key_height -= (key_height - target) * smoothing_factor;
-
-        if (target < minValue)  target = minValue;
-        else if (target > maxValue)  target = maxValue;
-
-        float diff = key_height - target;
-        if (diff < 0.0005 && diff > -0.0005) {
-            key_height = target;
-        }    
-    }
-
-    // SCROLL
-    {
-        static float target = default_scroll_offset;
-        const float minValue = 0;
-        const float maxValue = scroll_content_width - view_width;
-
-        if (adjust_scroll_offset_after_scaling != 0) {
-            target += adjust_scroll_offset_after_scaling;
-            scroll_offset += adjust_scroll_offset_after_scaling;
-        }
-
-        if (!IsKeyDown(KEY_LEFT_CONTROL)) {
-            int scroll_power = view_width / 4;
-            if (IsKeyDown(KEY_LEFT_SHIFT))  scroll_power *= 5;
-            target += GetMouseWheelMove() * scroll_power;
-
-            if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-                target = 0;
-            }
-        }
-
-        scroll_offset -= (scroll_offset - target) * smoothing_factor;
-
-        if (scroll_content_width > view_width) {
-            if (target < minValue)  target = minValue;
-            else if (target > maxValue)  target = maxValue;
-        } else {
-            target = 0;
-        }
-
-        float diff = scroll_offset - target;
-        if (diff < 0.0005 && diff > -0.0005) {
-            scroll_offset = target;
-        }
-    }
+    // for the next frame
+    assert(content_size > 0);
+    scroll_zoom_state.scroll_speed = view_width / content_size;
 
     DrawRectangle(
         -scroll_offset, 
         view_y,
-        scroll_content_width,
+        content_size,
         128 * key_height, 
         GRAY
     );
@@ -304,22 +147,17 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     }
 
     if (is_selecting) {
+        DrawRectangleV(selection_start, Vector2Subtract(selection_end, selection_start), BLUE);
+
+        // debug console printout
         char text[50];
         sprintf(text, "Start: %f, %f", selection_start.x, selection_start.y);
         DrawConsoleLine((char*) text);
-
         char text2[50];
         sprintf(text2, "End: %f, %f", selection_end.x, selection_end.y);
         DrawConsoleLine((char*) text2);
-
         DrawConsoleLine("Selecting");
-
-        DrawRectangleV(selection_start, Vector2Subtract(selection_end, selection_start), BLUE);
     }
-}
-
-bool DrawButton(char* title, int id, int x, int y, int width, int height) {
-    return DrawButtonRectangle(title, id, ((Rectangle) { x, y, width, height }));
 }
 
 // AUDIO
@@ -547,7 +385,7 @@ int main() {
     while(!WindowShouldClose()) {
         BeginDrawing();
             ClearBackground(DARKGRAY);
-            console_lines_this_frame = 0;
+            ClearConsole();
 
             const int notes_panel_top_offset = 200;
             if (debug_buffer == NULL) {

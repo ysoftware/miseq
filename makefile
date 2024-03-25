@@ -14,6 +14,7 @@ ifeq ($(detected_OS),Windows)
 	gcc  -Wall -Wextra \
 		main.c \
 		midi.c \
+		ui.c \
 		-std=c99 \
 		-o miseq.exe \
 		-Iraylib-5.0_win/include \
@@ -39,6 +40,7 @@ else ifeq ($(detected_OS),Darwin)
 		-framework OpenGL \
 		main.c \
 		midi.c \
+		ui.c \
 		-o miseq.app
 else
 	@echo "Unsupported operating system."
