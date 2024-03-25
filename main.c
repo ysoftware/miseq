@@ -132,34 +132,41 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     }
 
     // NOTE SELECTION
-    static bool is_selecting = false;
-    static Vector2 selection_start;
-    static Vector2 selection_end;
+    static Vector2 selection_first_point;
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        // TODO: check if mouse in view bounds
-        if (!is_selecting) {
-            is_selecting = true;
-            selection_start = GetMousePosition();
-        }
-        selection_end = GetMousePosition();
+    Vector2 mouse_position = GetMousePosition();
+    struct Rectangle view_rectangle = (struct Rectangle) { view_x, view_y, view_width, view_height };
+    bool is_mouse_in_bounds = CheckCollisionPointRec(mouse_position, view_rectangle);
+    
+    bool is_selecting = !Vector2Equals(selection_first_point, Vector2Zero());
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !is_selecting && is_mouse_in_bounds) {
+        selection_first_point = mouse_position;
+        is_selecting = true;
+    }
+
+    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && is_selecting) {
+        Vector2 selection_second_point = mouse_position;
+
+        float start_x = fmin(selection_first_point.x, selection_second_point.x);
+        float start_y = fmin(selection_first_point.y, selection_second_point.y);
+        Vector2 start = (struct Vector2) {
+            fmin(view_x + view_width, fmax(view_x, start_x)),
+            fmin(view_y + view_height, fmax(view_y, start_y)),
+        };
+
+        float end_x = fmax(selection_first_point.x, selection_second_point.x);
+        float end_y = fmax(selection_first_point.y, selection_second_point.y);
+        Vector2 end = (struct Vector2) {
+            fmin(view_x + view_width, fmax(view_x, end_x)),
+            fmin(view_y + view_height, fmax(view_y, end_y)),
+        };
+
+        Vector2 size = Vector2Subtract(end, start);
+        DrawRectangleV(start, size, BLUE);
     } else {
-        is_selecting = false;
+        selection_first_point = Vector2Zero();
     }
 
-    if (is_selecting) {
-        // TODO: Bug: not all possible quarters are drawn
-        DrawRectangleV(selection_start, Vector2Subtract(selection_end, selection_start), BLUE);
-
-        // debug console printout
-        char text[50];
-        sprintf(text, "Start: %f, %f", selection_start.x, selection_start.y);
-        DrawConsoleLine((char*) text);
-        char text2[50];
-        sprintf(text2, "End: %f, %f", selection_end.x, selection_end.y);
-        DrawConsoleLine((char*) text2);
-        DrawConsoleLine("Selecting");
-    }
 }
 
 // AUDIO
