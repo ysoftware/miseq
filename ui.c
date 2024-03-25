@@ -9,6 +9,7 @@
 
 #include "ui.h"
 
+const float theta = 0.000005f;
 int interacting_button_id = 0;
 int console_lines_this_frame = 0;
 
@@ -32,7 +33,7 @@ void process_scroll_interaction(struct ScrollZoom *state) {
 
     // scroll theta
     float diff_scroll = state->scroll - state->target_scroll;
-    if (diff_scroll < 0.0005 && diff_scroll > -0.0005) {
+    if (diff_scroll < theta && diff_scroll > -theta) {
         state->scroll = state->target_scroll;
     }
 
@@ -51,7 +52,7 @@ void process_scroll_interaction(struct ScrollZoom *state) {
 
     // zoom x theta
     float diff_zoom_x = state->zoom_x - state->target_zoom_x;
-    if (diff_zoom_x < 0.0005 && diff_zoom_x > -0.0005) {
+    if (diff_zoom_x < theta && diff_zoom_x > -theta) {
         state->zoom_x = state->target_zoom_x;
     }
 
@@ -70,7 +71,7 @@ void process_scroll_interaction(struct ScrollZoom *state) {
 
     // zoom y theta
     float diff_zoom_y = state->zoom_y - state->target_zoom_y;
-    if (diff_zoom_y < 0.0005 && diff_zoom_y > -0.0005) {
+    if (diff_zoom_y < theta && diff_zoom_y > -theta) {
         state->zoom_y = state->target_zoom_y;
     }
 }
