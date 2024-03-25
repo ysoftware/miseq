@@ -327,21 +327,48 @@ int prepare_sound() {
 }
 
 void DrawDebugBuffer(float view_x, float view_y, float view_width, float view_height) {
+    int samples_count = 1000 * 512;
+
+    static struct ScrollZoom scroll_zoom_state = {
+        .zoom_x = 0.5f,
+        .zoom_y = 0.5f,
+        .target_zoom_x = 0.5f,
+        .target_zoom_y = 0.5f
+    };
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+        scroll_zoom_state.target_zoom_x = 0.5f;
+        scroll_zoom_state.target_zoom_y = 0.5f;
+        scroll_zoom_state.target_scroll = 0;
+    } else {
+        process_scroll_interaction(&scroll_zoom_state);
+    }
+
+    float sample_width = scroll_zoom_state.zoom_x * 1.0f;
+    float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
+    float content_size = sample_width * samples_count;
+    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
+    float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
+
+    // for the next frame
+    assert(content_size > 0);
+    scroll_zoom_state.scroll_speed = view_width / content_size;
+
     DrawRectangle(
-        0, 
+        -scroll_offset, 
         view_y,
-        SCREEN_WIDTH,
+        content_size,
         view_height, 
         GRAY
     );
 
-    for (int i = 0; i < 1000 * 512; i++) {
+    for (int i = 0; i < samples_count; i++) {
         float value = debug_buffer[i * 6];
 
-        float posX = i * 0.2;
-        float posY = view_height - (view_height/2 - (-1.0f * value * view_height/2));
+        float posX = i * sample_width - (int) scroll_offset;
+        float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
         Vector2 position = { view_x + posX, view_y + posY };
-        Vector2 size = { 1, view_height / 50 };
+        Vector2 size = { 2, view_height / 50 };
 
         if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
             DrawRectangleV(position, size, BLACK);
@@ -355,7 +382,7 @@ void DrawDebugBuffer(float view_x, float view_y, float view_width, float view_he
 }
 
 void play_midi() {
-    prepare_sound();
+    /* prepare_sound(); */
 
     // for debug we call portaudioCallback and display the samples until the user presses w on the keyboard
     debug_buffer = malloc(512 * 100000 * sizeof(float));
