@@ -3,6 +3,7 @@ struct Note {
     uint8_t velocity;
     uint32_t start_tick;
     uint32_t end_tick;
+    bool is_selected;
 };
 
 struct NoteEvent {

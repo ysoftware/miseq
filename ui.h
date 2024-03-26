@@ -1,5 +1,11 @@
 #include "raylib.h"
 
+#define Console(Format, Arguments...) { \
+    char text[50]; \
+    sprintf(text, Format, Arguments); \
+    DrawConsoleLine((char*) text); \
+}
+
 // scroll value: 0.0 -> 1.0, only one axis
 // zoom values: 0.1 -> 0.5 -> 0.9, 0.5 is the default
 struct ScrollZoom {

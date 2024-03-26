@@ -69,7 +69,8 @@ void create_notes() {
             key,
             velocity,
             current_tick,
-            current_tick + note_duration
+            current_tick + note_duration,
+            false
         };
 
         notes[notes_count] = note;
@@ -82,6 +83,9 @@ void create_notes() {
 // USER INTERFACE
 
 void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
+    // draw notes
+    if (notes_count == 0) return;
+
     static struct ScrollZoom scroll_zoom_state = {
         .zoom_x = 0.5f,
         .zoom_y = 0.5f,
@@ -107,6 +111,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     assert(content_size > 0);
     scroll_zoom_state.scroll_speed = view_width / content_size;
 
+    // background
     DrawRectangle(
         -scroll_offset, 
         view_y,
@@ -115,25 +120,8 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         GRAY
     );
 
-    if (notes_count == 0) return;
-    int draw_count = 0;
-    for (int i = 0; i < notes_count; i++) {
-        struct Note note = notes[i];
-
-        int posX = note.start_tick * tick_width - (int) scroll_offset;
-        int posY = 128 * key_height - note.key * key_height;
-        int width = (note.end_tick - note.start_tick) * tick_width;
-        int height = key_height;
-
-        if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
-            DrawRectangle(view_x + posX, view_y + posY, width, height, BLACK);
-            draw_count += 1;
-        }
-    }
-
-    // NOTE SELECTION
+    // selection state
     static Vector2 selection_first_point;
-
     Vector2 mouse_position = GetMousePosition();
     struct Rectangle view_rectangle = (struct Rectangle) { view_x, view_y, view_width, view_height };
     bool is_mouse_in_bounds = CheckCollisionPointRec(mouse_position, view_rectangle);
@@ -144,7 +132,10 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         is_selecting = true;
     }
 
-    if (IsMouseButtonDown(MOUSE_BUTTON_LEFT) && is_selecting) {
+    struct Rectangle selection_rectangle;
+
+    // selection rect
+    if ((IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) && is_selecting) {
         Vector2 selection_second_point = mouse_position;
 
         float start_x = fmin(selection_first_point.x, selection_second_point.x);
@@ -162,9 +153,37 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         };
 
         Vector2 size = Vector2Subtract(end, start);
-        DrawRectangleV(start, size, BLUE);
+        selection_rectangle = (struct Rectangle) { start.x, start.y, size.x, size.y };
+       
+        if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+            DrawRectangleRec(selection_rectangle, BLUE);
+        } else {
+            selection_first_point = Vector2Zero();
+        }
     } else {
         selection_first_point = Vector2Zero();
+    }
+
+    for (int i = 0; i < notes_count; i++) {
+        struct Note note = notes[i];
+
+        int posX = note.start_tick * tick_width - (int) scroll_offset;
+        int posY = 128 * key_height - note.key * key_height;
+        int width = (note.end_tick - note.start_tick) * tick_width;
+        int height = key_height;
+
+        struct Rectangle note_rectangle = { view_x + posX, view_y + posY, width, height };
+        bool is_being_selected = CheckCollisionRecs(selection_rectangle, note_rectangle);
+        Color note_color = is_being_selected || note.is_selected ? GREEN : BLACK;
+
+        if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
+            DrawRectangleRec(note_rectangle, note_color);
+        }
+
+        // save selection state on mouse release
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !note.is_selected && is_being_selected) {
+            notes[i].is_selected = true;
+        }
     }
 
 }
