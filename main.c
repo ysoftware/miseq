@@ -1,5 +1,4 @@
 #include "raylib.h"
-#include "portaudio.h"
 #include "raymath.h"
 
 #include <assert.h>
@@ -21,10 +20,14 @@ const int SCREEN_WIDTH = 2500;
 const int SCREEN_HEIGHT = 1000;
 
 // program state
+bool is_displaying_waveform = false;
+
 struct Note notes[NOTES_LIMIT];
 int notes_count = 0;
 float *waveform_samples = NULL;
-bool is_displaying_waveform = false;
+int waveform_samples_count = 0;
+
+// functions
 
 double random_value() {
     double value = (double)GetRandomValue(0, 100000) / 100000;
@@ -45,7 +48,7 @@ void create_notes() {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 200; i++) {
+    for (double i = 0; i < 3; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 9 * random_value();
@@ -181,8 +184,6 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
 }
 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
-    int samples_count = 1000 * 512;
-
     static struct ScrollZoom scroll_zoom_state = {
         .zoom_x = 0.5f,
         .zoom_y = 0.5f,
@@ -198,9 +199,11 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         process_scroll_interaction(&scroll_zoom_state);
     }
 
+    int samples_to_draw_count = waveform_samples_count * FRAMES_PER_BUFFER;
+
     float sample_width = scroll_zoom_state.zoom_x * 1.0f;
     float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
-    float content_size = sample_width * samples_count;
+    float content_size = sample_width * samples_to_draw_count;
     if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
 
@@ -216,8 +219,8 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         GRAY
     );
 
-    for (int i = 0; i < samples_count; i++) {
-        float value = waveform_samples[i * 6];
+    for (int i = 0; i < samples_to_draw_count; i++) {
+        float value = waveform_samples[i * 2];
 
         float posX = i * sample_width - (int) scroll_offset;
         float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
@@ -252,32 +255,18 @@ typedef struct {
         float frequency;
         float attack;
     } active_notes[MAX_POLYPHONY];
-} portaudioUserData;
+} SoundState;
 
 // TODO: prerender the wave output and then return it to portaudio or save it to file
 // TODO: use miniaudio to play .wav, do it non-ui-blocking 
 // TODO: link audio lib statically
 // TODO: export .wav in wav.h
 
-static int portaudioCallback(
-    const void *inputBuffer,
-    void *outputBuffer,
-    unsigned long framesPerBuffer,
-    const PaStreamCallbackTimeInfo* timeInfo,
-    PaStreamCallbackFlags statusFlags,
-    void *userData
-) {
-    (void)inputBuffer;
-    (void)timeInfo;
-    (void)statusFlags;
-
-    portaudioUserData *data = (portaudioUserData*)userData;
-    float *out = (float*)outputBuffer;
+static void create_samples_from_notes(float *buffer, SoundState *data, unsigned long frames_per_buffer) {
     int frames_per_tick = 500;
 
-    for (unsigned int frame = 0; frame < framesPerBuffer; frame++) {
+    for (unsigned long frame = 0; frame < frames_per_buffer; frame++) {
         if (frame % frames_per_tick == 0) {
-            data->current_tick++;
 
             // Check for note starts and stops
             for (int i = 0; i < data->notes_count; i++) {
@@ -302,9 +291,12 @@ static int portaudioCallback(
                     }
                 }
             }
+
+            data->current_tick++;
         }
 
         float mixedSample = 0.0f;
+
         // Mix active notes
         for (int i = 0; i < MAX_POLYPHONY; i++) {
             if (data->active_notes[i].active) {
@@ -336,92 +328,39 @@ static int portaudioCallback(
             }
         }
         
-        *out++ = mixedSample; // left
-        *out++ = mixedSample; // right
+        *buffer++ = mixedSample; // left
+        *buffer++ = mixedSample; // right
     }
-
-    return paContinue;
-}
-
-int prepare_sound() {
-    portaudioUserData data = {
-        .notes = notes,
-        .notes_count = notes_count,
-        .current_tick = 0,
-        .active_notes = { }
-    };
-
-    PaError err = Pa_Initialize();
-    if (err != paNoError) {
-        printf("[ERROR] Could not initialize audio: %s\n", Pa_GetErrorText(err));
-        return err;
-    }
-
-    PaStream *stream;
-    err = Pa_OpenDefaultStream(
-        &stream,
-        0, // input channels
-        2, // output channels
-        paFloat32, // sample format
-        SAMPLE_RATE,
-        1024, // frames per buffer
-        portaudioCallback,
-        &data
-    );
-    if (err != paNoError) {
-        printf("[ERROR] Could not open audio stream: %s\n", Pa_GetErrorText(err));
-        return err; 
-    }
-
-    err = Pa_StartStream(stream);
-    if (err != paNoError) {
-        printf("[ERROR] Could not start audio stream: %s\n", Pa_GetErrorText(err));
-        return err; 
-    }
-
-    Pa_Sleep(1024*15);
-
-    err = Pa_StopStream(stream);
-    if (err != paNoError) {
-        printf("[ERROR] Could not start audio stream: %s\n", Pa_GetErrorText(err));
-        return err; 
-    }
-
-    err = Pa_Terminate();
-    if (err != paNoError) {
-        printf("PortAudio error: %s\n", Pa_GetErrorText(err));
-        return err;
-    }
-
-    printf("Playing sound...\n");
-
-    return 0;
 }
 
 void play_midi() {
-    prepare_sound();
+    // TODO: play samples 
 }
 
-// TODO: clip empty tail
 void create_waveform() {
     waveform_samples = malloc(512 * 100000 * sizeof(float));
-    portaudioUserData data = {
+    SoundState data = {
         .notes = notes,
         .notes_count = notes_count,
         .current_tick = 0,
         .active_notes = { }
     };
 
-    for (int i = 0; i < 10000; i++) {
-        portaudioCallback(
-            NULL, 
-            (void*)&waveform_samples[512 * i], 
-            256,
-            NULL,
-            0,
-            &data
+    uint32_t end_tick = notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    int current_frame;
+
+    for (current_frame = 0; current_frame < 10000; current_frame++) {
+        create_samples_from_notes(
+            &waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS], 
+            &data, 
+            FRAMES_PER_BUFFER
         );
+
+        bool did_produce_silence = waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0;
+        if (data.current_tick > end_tick && did_produce_silence)  break;
     }
+
+    waveform_samples_count = current_frame;
 }
 
 int main() {
