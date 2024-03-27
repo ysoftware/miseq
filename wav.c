@@ -10,6 +10,8 @@
 #include "shared.h"
 #include "wav.h"
 
-void save_notes_wave_file(struct Note *notes, int notes_count) {
+void save_notes_wave_file(void* samples, int samples_count) {
     printf("Not implemented yet. Please look forward to it!\n");
+    (void)samples;
+    (void)samples_count;
 }

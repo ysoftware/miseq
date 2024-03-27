@@ -12,6 +12,7 @@
 
 #include "shared.h"
 #include "midi.h"
+#include "wav.h"
 #include "ui.h"
 
 #define NOTES_LIMIT 10000
@@ -19,25 +20,11 @@ const int FPS = 120;
 const int SCREEN_WIDTH = 2500;
 const int SCREEN_HEIGHT = 1000;
 
-// notes
+// program state
 struct Note notes[NOTES_LIMIT];
 int notes_count = 0;
-
-// play sound debug
-
-#define MAX_POLYPHONY       8
-typedef short               SAMPLE_t;
-#define A4_FREQUENCY        700
-#define G3_FREQUENCY        196
-#define SAMPLE_RATE         (44100)
-#define SAMPLE_ZERO         (0)
-#define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
-#define FORMAT_NAME         "Signed 16 Bit"
-
 float *waveform_samples = NULL;
 bool is_displaying_waveform = false;
-
-// utils
 
 double random_value() {
     double value = (double)GetRandomValue(0, 100000) / 100000;
@@ -477,7 +464,7 @@ int main() {
             }
 
             if (DrawButton("Export WAV", 3, SCREEN_WIDTH - 340, 70, 160, 40)) {
-                save_notes_wave_file(notes, notes_count);
+                save_notes_wave_file(waveform_samples, 0);
             }
 
             if (DrawButton("Play", 5, SCREEN_WIDTH - 510, 20, 160, 40)) {
