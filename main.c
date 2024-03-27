@@ -27,6 +27,8 @@ int notes_count = 0;
 float *waveform_samples = NULL;
 int waveform_samples_count = 0;
 
+Sound sound;
+
 // functions
 
 double random_value() {
@@ -42,16 +44,16 @@ void create_notes() {
 
     double base_velocity = 80;
     double base_key = 64;
-    double base_note_duration = 15;
+    double base_note_duration = 20;
 
     double wave1_random = 20 * random_value();
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 3; i++) {
+    for (double i = 0; i < 2000; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
-        double wave3 = sin(i / wave3_random) * 9 * random_value();
+        double wave3 = sin(i / wave3_random) * 20 * random_value();
 
         uint8_t key = (uint8_t) (base_key - wave1);
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
@@ -199,7 +201,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         process_scroll_interaction(&scroll_zoom_state);
     }
 
-    int samples_to_draw_count = waveform_samples_count * FRAMES_PER_BUFFER;
+    int samples_to_draw_count = waveform_samples_count;
 
     float sample_width = scroll_zoom_state.zoom_x * 1.0f;
     float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
@@ -333,9 +335,22 @@ static void create_samples_from_notes(float *buffer, SoundState *data, unsigned 
     }
 }
 
-void play_midi() {
-    // TODO: play samples 
+// TODO: audio error handling
+void play_sound() {
+    StopSound(sound);
+    Wave wave = (struct Wave) {
+        .frameCount = waveform_samples_count * 2,
+        .sampleRate = SAMPLE_RATE,
+        .sampleSize = sizeof(float),
+        .channels = NUMBER_OF_CHANNELS,
+        .data = waveform_samples
+    };
+
+    sound = LoadSoundFromWave(wave);
+    PlaySound(sound);
 }
+
+bool is_waiting_for_wave, is_waiting_for_sound = false;
 
 void create_waveform() {
     waveform_samples = malloc(512 * 100000 * sizeof(float));
@@ -351,7 +366,7 @@ void create_waveform() {
 
     for (current_frame = 0; current_frame < 10000; current_frame++) {
         create_samples_from_notes(
-            &waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS], 
+            &waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
             &data, 
             FRAMES_PER_BUFFER
         );
@@ -360,10 +375,11 @@ void create_waveform() {
         if (data.current_tick > end_tick && did_produce_silence)  break;
     }
 
-    waveform_samples_count = current_frame;
+    waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
 }
 
 int main() {
+    InitAudioDevice();
     InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "miseq");
     SetTargetFPS(FPS);
 
@@ -407,11 +423,19 @@ int main() {
             }
 
             if (DrawButton("Play", 5, SCREEN_WIDTH - 510, 20, 160, 40)) {
-                play_midi();
+                play_sound();
+            }
+
+            if (DrawButton("Stop", 6, SCREEN_WIDTH - 510, 70, 160, 40)) {
+                StopSound(sound);
             }
 
         EndDrawing();
     }
+
+    StopSound(sound);
+
+    CloseAudioDevice();
     CloseWindow();
 }
 
