@@ -10,6 +10,7 @@
 #include <math.h>
 #include <time.h>
 
+#include "shared.h"
 #include "midi.h"
 #include "ui.h"
 
@@ -33,7 +34,8 @@ typedef short               SAMPLE_t;
 #define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
 #define FORMAT_NAME         "Signed 16 Bit"
 
-float *debug_buffer = NULL;
+float *waveform_samples = NULL;
+bool is_displaying_waveform = false;
 
 // utils
 
@@ -186,6 +188,63 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         }
     }
 
+    if (DrawButton("Waveform", 4, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
+        is_displaying_waveform = true;
+    }
+}
+
+void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
+    int samples_count = 1000 * 512;
+
+    static struct ScrollZoom scroll_zoom_state = {
+        .zoom_x = 0.5f,
+        .zoom_y = 0.5f,
+        .target_zoom_x = 0.5f,
+        .target_zoom_y = 0.5f
+    };
+
+    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
+        scroll_zoom_state.target_zoom_x = 0.5f;
+        scroll_zoom_state.target_zoom_y = 0.5f;
+        scroll_zoom_state.target_scroll = 0;
+    } else {
+        process_scroll_interaction(&scroll_zoom_state);
+    }
+
+    float sample_width = scroll_zoom_state.zoom_x * 1.0f;
+    float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
+    float content_size = sample_width * samples_count;
+    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
+    float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
+
+    // for the next frame
+    assert(content_size > 0);
+    scroll_zoom_state.scroll_speed = view_width / content_size;
+
+    DrawRectangle(
+        -scroll_offset, 
+        view_y,
+        content_size,
+        view_height, 
+        GRAY
+    );
+
+    for (int i = 0; i < samples_count; i++) {
+        float value = waveform_samples[i * 6];
+
+        float posX = i * sample_width - (int) scroll_offset;
+        float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
+        Vector2 position = { view_x + posX, view_y + posY };
+        Vector2 size = { 2, view_height / 50 };
+
+        if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
+            DrawRectangleV(position, size, BLACK);
+        }
+    }
+
+    if (DrawButton("MIDI", 4, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
+        is_displaying_waveform = false;
+    }
 }
 
 // AUDIO
@@ -352,66 +411,13 @@ int prepare_sound() {
     return 0;
 }
 
-void DrawDebugBuffer(float view_x, float view_y, float view_width, float view_height) {
-    int samples_count = 1000 * 512;
-
-    static struct ScrollZoom scroll_zoom_state = {
-        .zoom_x = 0.5f,
-        .zoom_y = 0.5f,
-        .target_zoom_x = 0.5f,
-        .target_zoom_y = 0.5f
-    };
-
-    if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-        scroll_zoom_state.target_zoom_x = 0.5f;
-        scroll_zoom_state.target_zoom_y = 0.5f;
-        scroll_zoom_state.target_scroll = 0;
-    } else {
-        process_scroll_interaction(&scroll_zoom_state);
-    }
-
-    float sample_width = scroll_zoom_state.zoom_x * 1.0f;
-    float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
-    float content_size = sample_width * samples_count;
-    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
-    float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
-
-    // for the next frame
-    assert(content_size > 0);
-    scroll_zoom_state.scroll_speed = view_width / content_size;
-
-    DrawRectangle(
-        -scroll_offset, 
-        view_y,
-        content_size,
-        view_height, 
-        GRAY
-    );
-
-    for (int i = 0; i < samples_count; i++) {
-        float value = debug_buffer[i * 6];
-
-        float posX = i * sample_width - (int) scroll_offset;
-        float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
-        Vector2 position = { view_x + posX, view_y + posY };
-        Vector2 size = { 2, view_height / 50 };
-
-        if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
-            DrawRectangleV(position, size, BLACK);
-        }
-    }
-
-    if (IsKeyPressed(KEY_W)) {
-        free(debug_buffer);
-        debug_buffer = NULL;
-    }
+void play_midi() {
+    prepare_sound();
 }
 
-void play_midi() {
-    /* prepare_sound(); */
-
-    // for debug we call portaudioCallback and display the samples until the user presses w on the keyboard
-    debug_buffer = malloc(512 * 100000 * sizeof(float));
+// TODO: clip empty tail
+void create_waveform() {
+    waveform_samples = malloc(512 * 100000 * sizeof(float));
     portaudioUserData data = {
         .notes = notes,
         .notes_count = notes_count,
@@ -422,7 +428,7 @@ void play_midi() {
     for (int i = 0; i < 10000; i++) {
         portaudioCallback(
             NULL, 
-            (void*)&debug_buffer[512 * i], 
+            (void*)&waveform_samples[512 * i], 
             256,
             NULL,
             0,
@@ -436,6 +442,7 @@ int main() {
     SetTargetFPS(FPS);
 
     create_notes();
+    create_waveform();
     
     while(!WindowShouldClose()) {
         BeginDrawing();
@@ -443,7 +450,7 @@ int main() {
             ClearConsole();
 
             const int notes_panel_top_offset = 200;
-            if (debug_buffer == NULL) {
+            if (!is_displaying_waveform) {
                 DrawNotes(
                     0, 
                     notes_panel_top_offset,
@@ -452,7 +459,7 @@ int main() {
                 );
             } 
             else {
-                DrawDebugBuffer(
+                DrawWaveform(
                     0, 
                     notes_panel_top_offset,
                     SCREEN_WIDTH,
@@ -462,13 +469,18 @@ int main() {
 
             if (DrawButton("Generate", 1, SCREEN_WIDTH - 170, 20, 160, 40)) {
                 create_notes();
+                create_waveform();
             }
 
             if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
                 save_notes_midi_file(notes, notes_count);
             }
 
-            if (DrawButton("Play", 3, SCREEN_WIDTH - 510, 20, 160, 40)) {
+            if (DrawButton("Export WAV", 3, SCREEN_WIDTH - 340, 70, 160, 40)) {
+                save_notes_wave_file(notes, notes_count);
+            }
+
+            if (DrawButton("Play", 5, SCREEN_WIDTH - 510, 20, 160, 40)) {
                 play_midi();
             }
 

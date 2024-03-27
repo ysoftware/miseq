@@ -14,6 +14,7 @@ ifeq ($(detected_OS),Windows)
 	gcc  -Wall -Wextra \
 		main.c \
 		midi.c \
+		wav.c \
 		ui.c \
 		-std=c99 \
 		-o miseq.exe \
@@ -40,6 +41,7 @@ else ifeq ($(detected_OS),Darwin)
 		-framework OpenGL \
 		main.c \
 		midi.c \
+		wav.c \
 		ui.c \
 		-o miseq.app
 else

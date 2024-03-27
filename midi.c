@@ -9,6 +9,13 @@
 
 #include "midi.h"
 
+struct NoteEvent {
+    uint8_t key;
+    uint8_t velocity;
+    uint32_t tick;
+    bool is_on;
+};
+
 uint32_t le_to_be(uint32_t num) {
     uint8_t b[4] = {0};
     *(uint32_t*)b = num;
