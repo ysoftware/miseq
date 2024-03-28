@@ -189,6 +189,8 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
 }
 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
+    if (waveform_samples_count == 0)  return;
+
     static struct ScrollZoom scroll_zoom_state = {
         .zoom_x = 0.5f,
         .zoom_y = 0.5f,
@@ -264,6 +266,7 @@ typedef struct {
 } SoundState;
 
 // TODO: export .wav in wav.h
+// TODO: there is a bug that lets a note play indefinitely
 
 static void create_samples_from_notes(float *buffer, SoundState *data, unsigned long frames_per_buffer) {
     int frames_per_tick = 500;
