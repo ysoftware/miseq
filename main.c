@@ -27,7 +27,7 @@ int notes_count = 0;
 float *waveform_samples = NULL;
 int waveform_samples_count = 0;
 
-Sound sound;
+Sound *sound;
 
 // functions
 
@@ -180,7 +180,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         }
     }
 
-    if (DrawButton("Waveform", 4, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
+    if (DrawButton("Waveform", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
         is_displaying_waveform = true;
     }
 }
@@ -234,7 +234,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         }
     }
 
-    if (DrawButton("MIDI", 4, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
+    if (DrawButton("MIDI", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
         is_displaying_waveform = false;
     }
 }
@@ -335,25 +335,32 @@ static void create_samples_from_notes(float *buffer, SoundState *data, unsigned 
     }
 }
 
-// TODO: audio error handling
-void play_sound() {
-    StopSound(sound);
-    Wave wave = (struct Wave) {
-        .frameCount = waveform_samples_count * 2,
-        .sampleRate = SAMPLE_RATE,
-        .sampleSize = sizeof(float),
-        .channels = NUMBER_OF_CHANNELS,
-        .data = waveform_samples
-    };
-
-    sound = LoadSoundFromWave(wave);
-    PlaySound(sound);
+void unload_sound() {
+    if (sound == NULL)  return;
+    StopSound(*sound);
+    UnloadSound(*sound);
+    free(sound);
+    sound = NULL;
 }
 
-bool is_waiting_for_wave, is_waiting_for_sound = false;
+// TODO: audio error handling
+void create_sound() {
+    unload_sound();
+
+    Wave wave = (struct Wave) {
+        .frameCount = waveform_samples_count * 2,
+            .sampleRate = SAMPLE_RATE,
+            .sampleSize = sizeof(float),
+            .channels = NUMBER_OF_CHANNELS,
+            .data = waveform_samples
+    };
+
+    sound = malloc(sizeof(Sound));
+    *sound = LoadSoundFromWave(wave);
+}
 
 void create_waveform() {
-    waveform_samples = malloc(512 * 100000 * sizeof(float));
+    waveform_samples = malloc(2048 * 100000 * sizeof(float));
     SoundState data = {
         .notes = notes,
         .notes_count = notes_count,
@@ -385,6 +392,7 @@ int main() {
 
     create_notes();
     create_waveform();
+    create_sound();
     
     while(!WindowShouldClose()) {
         BeginDrawing();
@@ -410,8 +418,10 @@ int main() {
             }
 
             if (DrawButton("Generate", 1, SCREEN_WIDTH - 170, 20, 160, 40)) {
+                unload_sound();
                 create_notes();
                 create_waveform();
+                create_sound();
             }
 
             if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
@@ -422,18 +432,24 @@ int main() {
                 save_notes_wave_file(waveform_samples, 0);
             }
 
-            if (DrawButton("Play", 5, SCREEN_WIDTH - 510, 20, 160, 40)) {
-                play_sound();
-            }
-
-            if (DrawButton("Stop", 6, SCREEN_WIDTH - 510, 70, 160, 40)) {
-                StopSound(sound);
+            if (sound == NULL) {
+                DrawButton("Sound Init...", 4, SCREEN_WIDTH - 510, 20, 160, 40);
+            } else {
+                if (IsSoundPlaying(*sound)) {
+                    if (DrawButton("Stop", 4, SCREEN_WIDTH - 510, 20, 160, 40)) {
+                        StopSound(*sound);
+                    }
+                } else {
+                    if (DrawButton("Play", 4, SCREEN_WIDTH - 510, 20, 160, 40)) {
+                        PlaySound(*sound);
+                    }
+                }
             }
 
         EndDrawing();
     }
 
-    StopSound(sound);
+    unload_sound();
 
     CloseAudioDevice();
     CloseWindow();
