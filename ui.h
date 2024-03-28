@@ -6,8 +6,8 @@
     DrawConsoleLine((char*) text); \
 }
 
-// scroll value: 0.0 -> 1.0, only one axis
-// zoom values: 0.1 -> 0.5 -> 0.9, 0.5 is the default
+// scroll value: 0.0 -> 1.0, only one axis, can bounce by going negative or above 1.0
+// zoom values: 0.01 -> 0.5 -> 0.99, 0.5 is the default
 struct ScrollZoom {
     float scroll_speed;
     float scroll;

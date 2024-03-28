@@ -53,7 +53,7 @@ void create_notes() {
     for (double i = 0; i < 80; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
-        double wave3 = sin(i / wave3_random) * 20 * random_value();
+        double wave3 = sin(i / wave3_random) * 10 * random_value();
 
         uint8_t key = (uint8_t) (base_key - wave1);
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
@@ -76,7 +76,7 @@ void create_notes() {
 
 // USER INTERFACE
 
-void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
+void DrawNotes(float view_x, float view_y, float view_width, float view_height) {
     // draw notes
     if (notes_count == 0) return;
 
@@ -95,14 +95,14 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
         process_scroll_interaction(&scroll_zoom_state);
     }
 
-    float key_height = scroll_zoom_state.zoom_y * 12;
-    float tick_width = scroll_zoom_state.zoom_x * 2;
+    float key_height = 3 + scroll_zoom_state.zoom_y * 10;
+    float tick_width = 0.05 + scroll_zoom_state.zoom_x * 3;
     float content_size = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    assert(content_size > 0);
 
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
 
     // for the next frame
-    assert(content_size > 0);
     scroll_zoom_state.scroll_speed = view_width / content_size;
     if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
@@ -164,6 +164,7 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
 
         struct Rectangle note_rect = {
             view_x - scroll_offset + (note.start_tick * tick_width),
+            // TODO: center keys vertically
             view_y + (128 * key_height) - (note.key * key_height),
             (note.end_tick - note.start_tick) * tick_width,
             key_height 
@@ -208,13 +209,15 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
     int samples_to_draw_count = waveform_samples_count;
 
+    // TODO: select proper value for wave_amplitude
     float sample_width = scroll_zoom_state.zoom_x * 1.0f;
-    float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
+    float wave_amplitude = 100 + scroll_zoom_state.zoom_y * (view_height * 3 - 100);
+
     float content_size = sample_width * samples_to_draw_count;
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
+    assert(content_size > 0);
 
     // for the next frame
-    assert(content_size > 0);
     scroll_zoom_state.scroll_speed = view_width / content_size;
     if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 

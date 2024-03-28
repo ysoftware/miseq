@@ -47,8 +47,10 @@ void process_scroll_interaction(struct ScrollZoom *state) {
     state->zoom_x -= change_x;
 
     // zoom x under/overflow
-    if (state->zoom_x < 0.1f)  state->target_zoom_x = 0.1f;
-    else if (state->zoom_x > 0.9f)  state->target_zoom_x = 0.9f;
+    if (state->target_zoom_x < 0.01f)  state->target_zoom_x = 0.01f;
+    else if (state->target_zoom_x > 0.99f)  state->target_zoom_x = 0.99f;
+    if (state->zoom_x < 0.01f)  state->zoom_x = 0.01f;
+    else if (state->zoom_x > 0.99f)  state->zoom_x = 0.99f;
 
     // zoom x theta
     float diff_zoom_x = state->zoom_x - state->target_zoom_x;
@@ -66,8 +68,10 @@ void process_scroll_interaction(struct ScrollZoom *state) {
     state->zoom_y -= change_y;
 
     // zoom y under/overflow
-    if (state->zoom_y < 0.1f)  state->target_zoom_y = 0.1f;
-    else if (state->zoom_y > 0.9f)  state->target_zoom_y = 0.9f;
+    if (state->target_zoom_y < 0.01f)  state->target_zoom_y = 0.01f;
+    else if (state->target_zoom_y > 0.99f)  state->target_zoom_y = 0.99f;
+    if (state->zoom_y < 0.01f)  state->zoom_y = 0.01f;
+    else if (state->zoom_y > 0.99f)  state->zoom_y = 0.99f;
 
     // zoom y theta
     float diff_zoom_y = state->zoom_y - state->target_zoom_y;
