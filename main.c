@@ -50,7 +50,7 @@ void create_notes() {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 2000; i++) {
+    for (double i = 0; i < 80; i++) {
         double wave1 = cos(i / wave1_random) * 64 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 20 * random_value();
@@ -106,13 +106,13 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     scroll_zoom_state.scroll_speed = view_width / content_size;
 
     // background
-    DrawRectangle(
-        -scroll_offset, 
+    struct Rectangle background_rect = {
+        fmax(view_x, -scroll_offset),
         view_y,
-        content_size,
-        128 * key_height, 
-        GRAY
-    );
+        fmin(view_width, content_size-fmax(0, scroll_offset)),
+        view_height, 
+    };
+    DrawRectangleRec(background_rect, GRAY);
 
     // selection state
     static Vector2 selection_first_point;
@@ -161,17 +161,19 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     for (int i = 0; i < notes_count; i++) {
         struct Note note = notes[i];
 
-        int posX = note.start_tick * tick_width - (int) scroll_offset;
-        int posY = 128 * key_height - note.key * key_height;
-        int width = (note.end_tick - note.start_tick) * tick_width;
-        int height = key_height;
+        struct Rectangle note_rect = {
+            view_x - scroll_offset + (note.start_tick * tick_width),
+            view_y + (128 * key_height) - (note.key * key_height),
+            (note.end_tick - note.start_tick) * tick_width,
+            key_height 
+        };
 
-        struct Rectangle note_rectangle = { view_x + posX, view_y + posY, width, height };
-        bool is_being_selected = CheckCollisionRecs(selection_rectangle, note_rectangle);
+        struct Rectangle note_clipped_rect = GetCollisionRec(background_rect, note_rect);
+        bool is_being_selected = CheckCollisionRecs(selection_rectangle, note_rect);
         Color note_color = is_being_selected || note.is_selected ? GREEN : BLACK;
 
-        if (posX < view_width && posX + width > 0 && posY < view_height && posY + height > 0) {
-            DrawRectangleRec(note_rectangle, note_color);
+        if (note_clipped_rect.width > 0) {
+            DrawRectangleRec(note_clipped_rect, note_color);
         }
 
         // save selection state on mouse release
@@ -213,13 +215,14 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     assert(content_size > 0);
     scroll_zoom_state.scroll_speed = view_width / content_size;
 
-    DrawRectangle(
-        -scroll_offset, 
+    // background
+    struct Rectangle background_rect = {
+        fmax(view_x, -scroll_offset),
         view_y,
-        content_size,
+        fmin(view_width, content_size-fmax(0, scroll_offset)),
         view_height, 
-        GRAY
-    );
+    };
+    DrawRectangleRec(background_rect, GRAY);
 
     for (int i = 0; i < samples_to_draw_count; i++) {
         float value = waveform_samples[i * 2];
@@ -259,9 +262,6 @@ typedef struct {
     } active_notes[MAX_POLYPHONY];
 } SoundState;
 
-// TODO: prerender the wave output and then return it to portaudio or save it to file
-// TODO: use miniaudio to play .wav, do it non-ui-blocking 
-// TODO: link audio lib statically
 // TODO: export .wav in wav.h
 
 static void create_samples_from_notes(float *buffer, SoundState *data, unsigned long frames_per_buffer) {
@@ -360,7 +360,10 @@ void create_sound() {
 }
 
 void create_waveform() {
-    waveform_samples = malloc(2048 * 100000 * sizeof(float));
+    int data_size = 2048 * 100000 * sizeof(float);
+    waveform_samples = malloc(data_size);
+    memset(waveform_samples, 0, data_size);
+
     SoundState data = {
         .notes = notes,
         .notes_count = notes_count,
@@ -402,18 +405,18 @@ int main() {
             const int notes_panel_top_offset = 200;
             if (!is_displaying_waveform) {
                 DrawNotes(
-                    0, 
+                    20,
                     notes_panel_top_offset,
-                    SCREEN_WIDTH,
-                    SCREEN_HEIGHT - notes_panel_top_offset
+                    SCREEN_WIDTH-40,
+                    SCREEN_HEIGHT - notes_panel_top_offset - 20
                 );
             } 
             else {
                 DrawWaveform(
-                    0, 
+                    20, 
                     notes_panel_top_offset,
-                    SCREEN_WIDTH,
-                    SCREEN_HEIGHT - notes_panel_top_offset
+                    SCREEN_WIDTH-40,
+                    SCREEN_HEIGHT - notes_panel_top_offset - 20
                 );
             }
 
