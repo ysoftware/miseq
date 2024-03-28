@@ -98,16 +98,17 @@ void DrawNotes(int view_x, int view_y, int view_width, int view_height) {
     float key_height = scroll_zoom_state.zoom_y * 12;
     float tick_width = scroll_zoom_state.zoom_x * 2;
     float content_size = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
-    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
+
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
 
     // for the next frame
     assert(content_size > 0);
     scroll_zoom_state.scroll_speed = view_width / content_size;
+    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
     // background
     struct Rectangle background_rect = {
-        fmax(view_x, -scroll_offset),
+        fmax(view_x, view_x-scroll_offset),
         view_y,
         fmin(view_width, content_size-fmax(0, scroll_offset)),
         view_height, 
@@ -208,16 +209,16 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     float sample_width = scroll_zoom_state.zoom_x * 1.0f;
     float wave_amplitude = scroll_zoom_state.zoom_y * 4000;
     float content_size = sample_width * samples_to_draw_count;
-    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f;
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
 
     // for the next frame
     assert(content_size > 0);
     scroll_zoom_state.scroll_speed = view_width / content_size;
+    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
     // background
     struct Rectangle background_rect = {
-        fmax(view_x, -scroll_offset),
+        fmax(view_x, view_x-scroll_offset),
         view_y,
         fmin(view_width, content_size-fmax(0, scroll_offset)),
         view_height, 
