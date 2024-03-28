@@ -109,7 +109,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         fmax(view_x, view_x-scroll_offset),
         view_y,
         fmin(view_width, content_size-fmax(0, scroll_offset)),
-        view_height, 
+        fmin(view_height, 128 * key_height),
     };
     DrawRectangleRec(background_rect, GRAY);
 
