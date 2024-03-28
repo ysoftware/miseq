@@ -371,7 +371,7 @@ void create_sound() {
     unload_sound();
 
     Wave wave = (struct Wave) {
-        .frameCount = waveform_samples_count * 2,
+        .frameCount = waveform_samples_count,
         .sampleRate = SAMPLE_RATE,
         .sampleSize = sizeof(float),
         .channels = NUMBER_OF_CHANNELS,
