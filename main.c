@@ -44,20 +44,20 @@ void create_notes() {
 
     double base_velocity = 80;
     double base_key = 64;
-    /* double base_note_duration = 20; */
+    double base_note_duration = 20;
 
     double wave1_random = 20 * random_value();
     double wave2_random = 15 * random_value();
-    /* double wave3_random = 5 * random_value(); */
+    double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 300; i++) {
+    for (double i = 0; i < 100; i++) {
         double wave1 = cos(i / wave1_random) * 30 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
-        /* double wave3 = sin(i / wave3_random) * 10 * random_value(); */
+        double wave3 = sin(i / wave3_random) * 10 * random_value();
 
         uint8_t key = (uint8_t) (base_key - wave1);
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
-        uint8_t note_duration = 10; // (uint8_t) (base_note_duration - wave3);
+        uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
     
         notes[notes_count] = (struct Note) {
             key,
@@ -95,7 +95,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
     float key_height = 3 + scroll_zoom_state.zoom_y * 10;
     float tick_width = 0.05 + scroll_zoom_state.zoom_x * 3;
-    float content_size = tick_width * notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    float content_size = tick_width * notes[notes_count-1].end_tick; // NOTE: only considering notes are sorted
     assert(content_size > 0);
 
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
@@ -227,8 +227,8 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     };
     DrawRectangleRec(background_rect, GRAY);
 
-    // draw section separators every 100ms
-    int samples_per_section = SAMPLE_RATE / 10;
+    // draw section separators every 1 sec
+    int samples_per_section = SAMPLE_RATE;
 
     // TODO: adjust this drawing code to bounds check
     for (int i = 0; i < samples_to_draw_count; i++) {
@@ -276,49 +276,66 @@ typedef struct {
         float phase_accumulator;
         float frequency;
         float attack;
+        int identifier;
     } active_notes[MAX_POLYPHONY];
 } SoundState;
 
 // TODO: export .wav in wav.h
-// TODO: there is a bug that lets a note play indefinitely
+
+static int note_identifier(struct Note note) {
+    return 1000000000 + note.start_tick * 1000 + note.key;
+}
 
 static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t frames_per_buffer, int frames_per_tick) {
+    float attack_frames_length = SAMPLE_RATE / 4;
+    float attack_decrement = 1.0f / attack_frames_length;
+
+    float release_frames_length = SAMPLE_RATE / 4;
+    float release_increment = 1.0f / release_frames_length;
+
     for (uint32_t buf_frame = 0; buf_frame < frames_per_buffer; buf_frame++) {
         
         // Start or stop notes
         if (data->current_frame % frames_per_tick == 0) {
             uint32_t current_tick = data->current_frame / frames_per_tick;
-            /* printf("Frame %d tick %d\n", data->current_frame, current_tick); */
 
-            for (int i = 0; i < data->notes_count; i++) {
-                struct Note note = data->notes[i];
+            for (int note_index = 0; note_index < data->notes_count; note_index++) {
+                struct Note note = data->notes[note_index];
 
+                // TODO: test various polyphony settings
                 if (current_tick == note.start_tick) {
-                    // TODO: test various polyphony settings
-                    for (int j = 0; j < MAX_POLYPHONY; j++) {
-                        // TODO: detect and assert on note not found (which means polyphony exceeded)
-                        if (data->active_notes[j].active)  continue; // search for an inactive note
-
-                        data->active_notes[j].active = true;
-                        data->active_notes[j].is_releasing = false;
-                        data->active_notes[j].frequency = midiNoteToFrequency(note.key);
-                        data->active_notes[j].attack = 0.0f;
-                        break;
+                    for (int i = 0; i < MAX_POLYPHONY; i++) {
+                        if (!data->active_notes[i].active) { // search for a first not yet active note
+                            data->active_notes[i].active = true;
+                            data->active_notes[i].is_releasing = false;
+                            data->active_notes[i].frequency = midiNoteToFrequency(note.key);
+                            data->active_notes[i].attack = 0.0f;
+                            data->active_notes[i].identifier = note_identifier(note);
+                            break;
+                        } else if (i == MAX_POLYPHONY - 1) {
+                            printf("[ERROR] MAX_POLYPHONY exceeded. Starting a midi event is impossible.\n");
+                            assert(false);
+                        }
                     }
                 } else if (current_tick == note.end_tick) {
-                    for (int j = 0; j < MAX_POLYPHONY; j++) {
-                        // TODO: give notes id based on start_tick and frequency to track them correctly
-                        if (!data->active_notes[j].active || data->active_notes[j].frequency != midiNoteToFrequency(note.key))  continue;
+                    int note_id = note_identifier(note);
 
-                        data->active_notes[j].is_releasing = true;
-                        break;
+                    for (int i = 0; i < MAX_POLYPHONY; i++) {
+
+                        if (data->active_notes[i].identifier == note_id) { // search for the note by its identifier
+                            assert(data->active_notes[i].active);
+                            data->active_notes[i].is_releasing = true;
+                            break;
+                        } else if (i == MAX_POLYPHONY - 1) {
+                            printf("[ERROR] MAX_POLYPHONY exceeded. Stopping a midi event is impossible.\n");
+                            assert(false);
+                        }
                     }
                 }
             }
         }
 
-        // Mix active notes
-        float mixedSample = 0.0f;
+        // Calculate attack/release and phase values
         for (int i = 0; i < MAX_POLYPHONY; i++) {
             if (!data->active_notes[i].active)  continue;
 
@@ -333,24 +350,34 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
             // note is fully playing when is_releasing==false and attack==1.0f
             // otherwise attack will slowly increase or decrease depending on is_releasing
             if (data->active_notes[i].is_releasing) {
-                data->active_notes[i].attack -= 0.001f; // release speed
+                data->active_notes[i].attack -= release_increment;
 
                 if (data->active_notes[i].attack <= 0.0f) {
                     data->active_notes[i].active = false;
                 }
             } else {
-                data->active_notes[i].attack += 0.001f; // attack speed
+                data->active_notes[i].attack += attack_decrement;
                 if (data->active_notes[i].attack > 1.0f) {
                     data->active_notes[i].attack = 1.0f;
                 }
             }
+        }
 
-            // calculate immediate wave value, including attack/release
+        int active_notes_count = 0;
+        for (int i = 0; i < MAX_POLYPHONY; i++) {
+            if (data->active_notes[i].active)  active_notes_count++;
+        }
+
+        // Mix active notes
+        float mixedSample = 0.0f;
+        for (int i = 0; i < MAX_POLYPHONY; i++) {
+            if (!data->active_notes[i].active)  continue;
+
             float wave_value = sinf(data->active_notes[i].phase_accumulator);
             wave_value *= data->active_notes[i].attack;
-            mixedSample += wave_value / MAX_POLYPHONY;
+            mixedSample += wave_value / active_notes_count;
         }
-        
+
         *buffer++ = mixedSample; // left
         *buffer++ = mixedSample; // right
         data->current_frame++;
@@ -393,7 +420,7 @@ void create_waveform() {
         .active_notes = { }
     };
 
-    uint32_t end_tick = notes[notes_count-1].end_tick; // TODO: only considering notes are sorted
+    uint32_t end_tick = notes[notes_count-1].end_tick; // NOTE: only considering notes are sorted
     int current_frame;
     int frames_per_tick = SAMPLE_RATE / 100;
 
