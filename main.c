@@ -109,7 +109,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         fmax(view_x, view_x-scroll_offset),
         view_y,
         fmin(view_width, content_size-fmax(0, scroll_offset)),
-        fmin(view_height, 128 * key_height),
+        view_height
     };
     DrawRectangleRec(background_rect, GRAY);
 
@@ -162,8 +162,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
         struct Rectangle note_rect = {
             view_x - scroll_offset + (note.start_tick * tick_width),
-            // TODO: center keys vertically
-            view_y + (128 * key_height) - (note.key * key_height),
+            view_y + (view_height / 2) + (64 - note.key) * key_height,
             (note.end_tick - note.start_tick) * tick_width,
             key_height 
         };
