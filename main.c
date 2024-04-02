@@ -19,6 +19,10 @@ const int FPS = 120;
 const int SCREEN_WIDTH = 2500;
 const int SCREEN_HEIGHT = 1000;
 
+// predeclarations
+void create_waveform();
+void create_sound();
+
 // program state
 bool is_displaying_waveform = false;
 
@@ -64,7 +68,8 @@ void create_notes() {
             velocity,
             current_tick,
             current_tick + note_duration,
-            false
+            .is_selected = false,
+            .is_deleted = false
         };
 
         notes_count += 1;
@@ -114,6 +119,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     DrawRectangleRec(background_rect, GRAY);
 
     // selection state
+    bool did_edit_notes = false;
     static Vector2 selection_first_point;
     Vector2 mouse_position = GetMousePosition();
     struct Rectangle view_rectangle = (struct Rectangle) { view_x, view_y, view_width, view_height };
@@ -159,6 +165,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
     for (int i = 0; i < notes_count; i++) {
         struct Note note = notes[i];
+        if (note.is_deleted)  continue;
 
         struct Rectangle note_rect = {
             view_x - scroll_offset + (note.start_tick * tick_width),
@@ -189,6 +196,16 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && is_inside_selection_rect) {
             notes[i].is_selected = !IsKeyDown(KEY_LEFT_CONTROL);
         }
+
+        if (IsKeyPressed(KEY_D) && notes[i].is_selected) {
+            notes[i].is_deleted = true;
+            did_edit_notes = true;
+        }
+    }
+
+    if (did_edit_notes) {
+        create_waveform();
+        create_sound();
     }
 
     if (DrawButton("Waveform", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
@@ -229,6 +246,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
     // background
+    // TODO: background is scrolled, test better
     struct Rectangle background_rect = {
         fmax(view_x, view_x-scroll_offset),
         view_y,
@@ -297,10 +315,10 @@ static int note_identifier(struct Note note) {
 }
 
 static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t frames_per_buffer, int frames_per_tick) {
-    float attack_frames_length = SAMPLE_RATE / 4;
+    float attack_frames_length = SAMPLE_RATE / 25;
     float attack_decrement = 1.0f / attack_frames_length;
 
-    float release_frames_length = SAMPLE_RATE / 4;
+    float release_frames_length = SAMPLE_RATE / 3;
     float release_increment = 1.0f / release_frames_length;
 
     for (uint32_t buf_frame = 0; buf_frame < frames_per_buffer; buf_frame++) {
@@ -311,6 +329,7 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
 
             for (int note_index = 0; note_index < data->notes_count; note_index++) {
                 struct Note note = data->notes[note_index];
+                if (note.is_deleted)  continue;
 
                 // TODO: test various polyphony settings
                 if (current_tick == note.start_tick) {
@@ -373,11 +392,6 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
             }
         }
 
-        int active_notes_count = 0;
-        for (int i = 0; i < MAX_POLYPHONY; i++) {
-            if (data->active_notes[i].active)  active_notes_count++;
-        }
-
         // Mix active notes
         float mixedSample = 0.0f;
         for (int i = 0; i < MAX_POLYPHONY; i++) {
@@ -385,8 +399,10 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
 
             float wave_value = sinf(data->active_notes[i].phase_accumulator);
             wave_value *= data->active_notes[i].attack;
-            mixedSample += wave_value / active_notes_count;
+            mixedSample += wave_value / MAX_POLYPHONY;
         }
+
+        // TODO: normalize the wave
 
         *buffer++ = mixedSample; // left
         *buffer++ = mixedSample; // right

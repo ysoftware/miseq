@@ -7,10 +7,11 @@ struct Note {
     uint32_t start_tick;
     uint32_t end_tick;
     bool is_selected;
+    bool is_deleted;
 };
 
 // audio setup
-#define MAX_POLYPHONY       8
+#define MAX_POLYPHONY       16
 #define A4_FREQUENCY        700
 #define G3_FREQUENCY        196
 #define FRAMES_PER_BUFFER   256
