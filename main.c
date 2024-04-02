@@ -168,16 +168,26 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         };
 
         struct Rectangle note_clipped_rect = GetCollisionRec(background_rect, note_rect);
-        bool is_being_selected = CheckCollisionRecs(selection_rectangle, note_rect);
-        Color note_color = is_being_selected || note.is_selected ? GREEN : BLACK;
+        bool is_inside_selection_rect = CheckCollisionRecs(selection_rectangle, note_rect);
+
+        Color note_color; 
+        if (is_inside_selection_rect && IsKeyDown(KEY_LEFT_CONTROL) == note.is_selected) {
+            if (note.is_selected) {
+                note_color = RED;
+            } else {
+                note_color = YELLOW;
+            }
+        } else {
+            note_color = note.is_selected ? GREEN : BLACK;
+        }
 
         if (note_clipped_rect.width > 0) {
             DrawRectangleRec(note_clipped_rect, note_color);
         }
 
         // save selection state on mouse release
-        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && !note.is_selected && is_being_selected) {
-            notes[i].is_selected = true;
+        if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && is_inside_selection_rect) {
+            notes[i].is_selected = !IsKeyDown(KEY_LEFT_CONTROL);
         }
     }
 
