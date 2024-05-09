@@ -88,14 +88,7 @@ bool DrawButtonRectangle(char* title, int id, Rectangle frame) {
     bool is_interacting = interacting_button_id == id;
 
 #if 1
-    if (interacting_button_id != 0 && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        interacting_button_id = 0;
-    }
-
-    if (!is_interacting && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
-        interacting_button_id = id;
-        did_click_button = true;
-    }
+    did_click_button = is_mouse_over && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
 #else
     // set interacting 
     if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
