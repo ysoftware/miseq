@@ -44,6 +44,16 @@ else ifeq ($(detected_OS),Darwin)
 		wav.c \
 		ui.c \
 		-o miseq.app
+else ifeq ($(detected_OS), Linux)
+	clang \
+		-lraylib \
+		-lGL -lm -lpthread -ldl -lrt -lX11 \
+		main.c \
+		midi.c \
+		wav.c \
+		ui.c \
+		-o miseq.app
+
 else
 	@echo "Unsupported operating system."
 	@exit 1
