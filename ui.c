@@ -10,8 +10,8 @@
 #include "ui.h"
 
 const float theta = 0.000005f;
-int interacting_button_id = 0;
 int console_lines_this_frame = 0;
+int interacting_button_id = 0;
 
 void process_scroll_interaction(struct ScrollZoom *state) {
     double smoothing_factor = GetFrameTime() * 10;
@@ -83,13 +83,32 @@ void process_scroll_interaction(struct ScrollZoom *state) {
 bool DrawButtonRectangle(char* title, int id, Rectangle frame) {
     assert(id != 0);
 
-    bool is_interacting = interacting_button_id == id;
+    bool did_click_button = false;
     bool is_mouse_over = CheckCollisionPointRec(GetMousePosition(), frame);
+    bool is_interacting = interacting_button_id == id;
 
+#if 1
+    if (interacting_button_id != 0 && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        interacting_button_id = 0;
+    }
+
+    if (!is_interacting && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
+        interacting_button_id = id;
+        did_click_button = true;
+    }
+#else
+    // set interacting 
     if (interacting_button_id == 0 && is_mouse_over && IsMouseButtonDown(MOUSE_BUTTON_LEFT)) {
         is_interacting = true;
         interacting_button_id = id;
     }
+    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
+        interacting_button_id = 0;
+        if (is_interacting && is_mouse_over) {
+            did_click_button = true;
+        }
+    }
+#endif
 
     Color background_color;
     Color title_color;
@@ -119,13 +138,7 @@ bool DrawButtonRectangle(char* title, int id, Rectangle frame) {
         title_color 
     );
 
-    if (is_interacting && IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
-        interacting_button_id = 0;
-        if (is_interacting && is_mouse_over) {
-            return true;
-        }
-    }
-    return false;
+    return did_click_button;
 }
 
 bool DrawButton(char* title, int id, int x, int y, int width, int height) {
