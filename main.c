@@ -113,7 +113,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     struct Rectangle background_rect = {
         fmax(view_x, view_x-scroll_offset),
         view_y,
-        fmin(view_width, content_size-fmax(0, scroll_offset)),
+        fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
         view_height
     };
     DrawRectangleRec(background_rect, GRAY);
@@ -246,11 +246,11 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
     // background
-    // TODO: background is scrolled, test better
+    // TODO: abstract these calculations for 'normal scrollable content views'
     struct Rectangle background_rect = {
         fmax(view_x, view_x-scroll_offset),
         view_y,
-        fmin(view_width, content_size-fmax(0, scroll_offset)),
+        fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
         view_height, 
     };
     DrawRectangleRec(background_rect, GRAY);
