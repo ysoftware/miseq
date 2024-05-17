@@ -14,6 +14,10 @@
 #include "wav.h"
 #include "ui.h"
 
+// TODO: implement hotloading
+// TODO: generate wave in a background thread
+// TODO: add undo for breaking actions: notes delete, generation
+
 #define NOTES_LIMIT 10000
 const int FPS = 120;
 const int SCREEN_WIDTH = 2500;
@@ -23,15 +27,38 @@ const int SCREEN_HEIGHT = 1000;
 void create_waveform();
 void create_sound();
 
-// program state
-bool is_displaying_waveform = false;
+typedef struct {
+    bool is_displaying_waveform;
+    struct Note notes[NOTES_LIMIT];
+    int notes_count;
+    float waveform_samples[2048 * NOTES_LIMIT];
+    int waveform_samples_count;
+    Sound *sound;
+} State;
 
-struct Note notes[NOTES_LIMIT];
-int notes_count = 0;
-float *waveform_samples = NULL;
-int waveform_samples_count = 0;
+State *state = NULL;
 
-Sound *sound;
+// hotreloading
+
+void plug_init() {
+    state = malloc(sizeof(*state));
+    assert(state != NULL && "Buy more RAM lol");
+    memset(state, 0, sizeof(*state));
+
+}
+
+void plug_update() {
+
+}
+
+void *plug_pre_reload() {
+    return state;
+}
+
+void plug_post_reload(void *old_state) {
+    state = old_state;
+
+}
 
 // functions
 
@@ -42,7 +69,7 @@ double random_value() {
 
 void create_notes() {
     srand(time(NULL));
-    notes_count = 0;
+    state->notes_count = 0;
 
     uint32_t current_tick = 0;
 
@@ -63,7 +90,7 @@ void create_notes() {
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
         uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
     
-        notes[notes_count] = (struct Note) {
+        state->notes[state->notes_count] = (struct Note) {
             key,
             velocity,
             current_tick,
@@ -72,7 +99,7 @@ void create_notes() {
             .is_deleted = false
         };
 
-        notes_count += 1;
+        state->notes_count += 1;
         current_tick += note_duration;
     }
 }
@@ -81,7 +108,7 @@ void create_notes() {
 
 void DrawNotes(float view_x, float view_y, float view_width, float view_height) {
     // draw notes
-    if (notes_count == 0) return;
+    if (state->notes_count == 0) return;
 
     static struct ScrollZoom scroll_zoom_state = {
         .zoom_x = 0.5f,
@@ -100,7 +127,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
     float key_height = 3 + scroll_zoom_state.zoom_y * 10;
     float tick_width = 0.05 + scroll_zoom_state.zoom_x * 3;
-    float content_size = tick_width * notes[notes_count-1].end_tick; // NOTE: only considering notes are sorted
+    float content_size = tick_width * state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
     assert(content_size > 0);
 
     float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
@@ -163,8 +190,8 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         selection_first_point = Vector2Zero();
     }
 
-    for (int i = 0; i < notes_count; i++) {
-        struct Note note = notes[i];
+    for (int i = 0; i < state->notes_count; i++) {
+        struct Note note = state->notes[i];
         if (note.is_deleted)  continue;
 
         struct Rectangle note_rect = {
@@ -194,11 +221,11 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
         // save selection state on mouse release
         if (IsMouseButtonReleased(MOUSE_BUTTON_LEFT) && is_inside_selection_rect) {
-            notes[i].is_selected = !IsKeyDown(KEY_LEFT_CONTROL);
+            state->notes[i].is_selected = !IsKeyDown(KEY_LEFT_CONTROL);
         }
 
-        if (IsKeyPressed(KEY_D) && notes[i].is_selected) {
-            notes[i].is_deleted = true;
+        if (IsKeyPressed(KEY_D) && state->notes[i].is_selected) {
+            state->notes[i].is_deleted = true;
             did_edit_notes = true;
         }
     }
@@ -209,12 +236,12 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     }
 
     if (DrawButton("Waveform", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
-        is_displaying_waveform = true;
+        state->is_displaying_waveform = true;
     }
 }
 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
-    if (waveform_samples_count == 0)  return;
+    if (state->waveform_samples_count == 0)  return;
 
     static struct ScrollZoom scroll_zoom_state = {
         .zoom_x = 0.5f,
@@ -231,7 +258,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         process_scroll_interaction(&scroll_zoom_state);
     }
 
-    int samples_to_draw_count = waveform_samples_count;
+    int samples_to_draw_count = state->waveform_samples_count;
 
     // TODO: select proper value for wave_amplitude
     float sample_width = scroll_zoom_state.zoom_x * 1.0f;
@@ -260,7 +287,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
     // TODO: adjust this drawing code to bounds check
     for (int i = 0; i < samples_to_draw_count; i++) {
-        float value = waveform_samples[i * 2];
+        float value = state->waveform_samples[i * 2];
 
         float posX = i * sample_width - scroll_offset;
         float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
@@ -283,7 +310,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     }
 
     if (DrawButton("MIDI", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
-        is_displaying_waveform = false;
+        state->is_displaying_waveform = false;
     }
 }
 
@@ -411,11 +438,11 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
 }
 
 void unload_sound() {
-    if (sound == NULL)  return;
-    StopSound(*sound);
-    UnloadSound(*sound);
-    free(sound);
-    sound = NULL;
+    if (state->sound == NULL)  return;
+    StopSound(*state->sound);
+    UnloadSound(*state->sound);
+    free(state->sound);
+    state->sound = NULL;
 }
 
 // TODO: audio error handling
@@ -423,47 +450,43 @@ void create_sound() {
     unload_sound();
 
     Wave wave = (struct Wave) {
-        .frameCount = waveform_samples_count,
+        .frameCount = state->waveform_samples_count,
         .sampleRate = SAMPLE_RATE,
         .sampleSize = sizeof(float),
         .channels = NUMBER_OF_CHANNELS,
-        .data = waveform_samples
+        .data = state->waveform_samples
     };
 
-    sound = malloc(sizeof(Sound));
-    *sound = LoadSoundFromWave(wave);
+    state->sound = malloc(sizeof(Sound));
+    *state->sound = LoadSoundFromWave(wave);
 }
 
 void create_waveform() {
-    int data_size = 2048 * 100000 * sizeof(float);
-    waveform_samples = malloc(data_size);
-    memset(waveform_samples, 0, data_size);
-
     SoundState data = {
-        .notes = notes,
-        .notes_count = notes_count,
+        .notes = state->notes,
+        .notes_count = state->notes_count,
         .current_frame = 0,
         .active_notes = { }
     };
 
-    uint32_t end_tick = notes[notes_count-1].end_tick; // NOTE: only considering notes are sorted
+    uint32_t end_tick = state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
     int current_frame;
     int frames_per_tick = SAMPLE_RATE / 100;
 
     for (current_frame = 0; current_frame < 10000; current_frame++) {
         create_samples_from_notes(
-            &waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
+            &state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
             &data, 
             FRAMES_PER_BUFFER,
             frames_per_tick
         );
 
-        bool did_produce_silence = waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0;
+        bool did_produce_silence = state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0;
         uint32_t current_tick = data.current_frame / frames_per_tick;
         if (current_tick > end_tick && did_produce_silence)  break;
     }
 
-    waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
+    state->waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
 }
 
 int main() {
@@ -481,7 +504,7 @@ int main() {
             ClearConsole();
 
             const int notes_panel_top_offset = 200;
-            if (!is_displaying_waveform) {
+            if (!state->is_displaying_waveform) {
                 DrawNotes(
                     20,
                     notes_panel_top_offset,
@@ -506,23 +529,23 @@ int main() {
             }
 
             if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
-                save_notes_midi_file(notes, notes_count);
+                save_notes_midi_file(state->notes, state->notes_count);
             }
 
             if (DrawButton("Export WAV", 3, SCREEN_WIDTH - 340, 70, 160, 40)) {
-                save_notes_wave_file(waveform_samples, 0);
+                save_notes_wave_file(state->waveform_samples, 0);
             }
 
-            if (sound == NULL) {
+            if (state->sound == NULL) {
                 DrawButton("Sound Init...", 4, SCREEN_WIDTH - 510, 20, 160, 40);
             } else {
-                if (IsSoundPlaying(*sound)) {
+                if (IsSoundPlaying(*state->sound)) {
                     if (DrawButton("Stop", 4, SCREEN_WIDTH - 510, 20, 160, 40)) {
-                        StopSound(*sound);
+                        StopSound(*state->sound);
                     }
                 } else {
                     if (DrawButton("Play", 4, SCREEN_WIDTH - 510, 20, 160, 40)) {
-                        PlaySound(*sound);
+                        PlaySound(*state->sound);
                     }
                 }
             }
