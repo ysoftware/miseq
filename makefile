@@ -1,62 +1,43 @@
 .SILENT: build
 
-# Detect OS Environment
-ifeq ($(OS),Windows_NT)
-detected_OS := Windows
+warnings := -Wall -Wextra
+
+ifeq ($(OS), Windows_NT)
+	raylib := -Iraylib-5.0_win/include -Lraylib-5.0_win/lib -lraylib
+	compiler := gcc -std=c99
+	frameworks := -lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm
+else ifeq ($(shell uname), Linux)
+	raylib := -lraylib
+	compiler := clang
+	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11 
 else
-detected_OS := $(shell uname)
+	raylib := -Iraylib-5.0_macos/include raylib-5.0_macos/lib/libraylib.a
+	compiler := clang
+	frameworks := -framework CoreAudio \
+				  -framework AudioToolbox -framework AudioUnit \
+				  -framework CoreServices -framework Carbon \
+				  -framework CoreVideo -framework IOKit \
+				  -framework Cocoa -framework GLUT \
+				  -framework OpenGL 
 endif
 
+all: dir plug app
 
-# Build Command
-build:
-ifeq ($(detected_OS),Windows)
-	gcc  -Wall -Wextra \
-		main.c \
-		midi.c \
-		wav.c \
-		ui.c \
-		-std=c99 \
-		-o miseq.exe \
-		-Iraylib-5.0_win/include \
-		-Lraylib-5.0_win/lib -lraylib \
-		-Iportaudio-19.7.0/include \
-		-Lportaudio-19.7.0/Release -lportaudio_x64 \
-		-lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm
-else ifeq ($(detected_OS),Darwin)
-	clang \
-		-Iraylib-5.0_macos/include \
-		raylib-5.0_macos/lib/libraylib.a \
-		-Iportaudio-19.7.0/include \
-		portaudio-19.7.0/lib/.libs/libportaudio.a \
-		-framework CoreAudio \
-		-framework AudioToolbox \
-		-framework AudioUnit \
-		-framework CoreServices \
-		-framework Carbon \
-		-framework CoreVideo \
-		-framework IOKit \
-		-framework Cocoa \
-		-framework GLUT \
-		-framework OpenGL \
-		main.c \
-		midi.c \
-		wav.c \
-		ui.c \
-		-o miseq.app
-else ifeq ($(detected_OS), Linux)
-	clang \
-		-lraylib \
-		-lGL -lm -lpthread -ldl -lrt -lX11 \
-		main.c \
-		midi.c \
-		wav.c \
-		ui.c \
-		-o miseq.app
+dir:
+	mkdir -p build
 
-else
-	@echo "Unsupported operating system."
-	@exit 1
-endif
+midi:
+	$(compiler) $(warnings) -fPIC -c src/midi.c -o build/midi.o
 
-	@echo "Build complete"
+wav:
+	$(compiler) $(warnings) -fPIC -c src/wav.c -o build/wav.o
+
+ui:
+	$(compiler) $(warnings) -fPIC -c src/ui.c -o build/ui.o 
+
+plug: midi wav ui
+	$(compiler) $(warnings) -fPIC -c src/main.c -o build/plug.o
+	$(compiler) $(warnings) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o
+
+app:
+	$(compiler) $(warnings) -o main.app src/main.c
