@@ -3,7 +3,7 @@
 warnings := -Wall -Wextra
 
 ifeq ($(OS), Windows_NT)
-	raylib := -Iraylib-5.0_win/include -Lraylib-5.0_win/lib -lraylib
+	raylib := -Ilib/raylib-5.0_win/include -Llib/raylib-5.0_win/lib -lraylib
 	compiler := gcc -std=c99
 	frameworks := -lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm
 else ifeq ($(shell uname), Linux)
@@ -11,7 +11,7 @@ else ifeq ($(shell uname), Linux)
 	compiler := clang
 	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11 
 else
-	raylib := -Iraylib-5.0_macos/include raylib-5.0_macos/lib/libraylib.a
+	raylib := -Ilib/raylib-5.0_macos/include lib/raylib-5.0_macos/lib/libraylib.a
 	compiler := clang
 	frameworks := -framework CoreAudio \
 				  -framework AudioToolbox -framework AudioUnit \
