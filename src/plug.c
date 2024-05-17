@@ -45,6 +45,7 @@ void plug_init() {
     assert(state != NULL && "Buy more RAM lol");
     memset(state, 0, sizeof(*state));
 
+    printf("hoooo hello\n");
 }
 
 void plug_update() {

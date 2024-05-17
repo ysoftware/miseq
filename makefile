@@ -1,6 +1,6 @@
 .SILENT: build
 
-warnings := -Wall -Wextra
+warnings := -Wall -Wextra -g
 
 ifeq ($(OS), Windows_NT)
 	raylib := -Ilib/raylib-5.0_win/include -Llib/raylib-5.0_win/lib -lraylib
@@ -40,4 +40,4 @@ plug: midi wav ui
 	$(compiler) $(warnings) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o
 
 app:
-	$(compiler) $(warnings) -o main.app src/main.c
+	$(compiler) $(warnings) $(raylib) -o main.app src/main.c $(frameworks)
