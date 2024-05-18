@@ -2,22 +2,17 @@
 #include <dlfcn.h>
 #include "raylib.h"
 
-const int FPS = 120;
-
 void *plugin_handle;
 void (*plug_init)();
 void (*plug_update)();
+void (*plug_cleanup)();
 void* (*plug_pre_reload)();
 void (*plug_post_reload)(void*);
 
 bool load_library() {
     if (plugin_handle) dlclose(plugin_handle);
     plugin_handle = dlopen("./build/libplug.so", RTLD_LAZY);
-
-    if (!plugin_handle) {
-        fprintf(stderr, "Error: %s\n", dlerror());
-        return false;
-    }
+    if (!plugin_handle) goto defer;
 
     plug_init = dlsym(plugin_handle, "plug_init");
     if (!plug_init) goto defer;
@@ -31,27 +26,32 @@ bool load_library() {
     plug_post_reload = dlsym(plugin_handle, "plug_post_reload");
     if (!plug_post_reload) goto defer;
 
-    return 0;
+    plug_cleanup = dlsym(plugin_handle, "plug_cleanup");
+    if (!plug_cleanup) goto defer;
+
+    return true; 
 
 defer:
-    fprintf(stderr, "Error: %s\n", dlerror());
-    dlclose(plugin_handle);
+    printf("Error: %s\n", dlerror());
+    if (plugin_handle) dlclose(plugin_handle);
     return false;
 }
 
 int main() {
+    int code = load_library();
+    if (!code) return 1;
+
     InitAudioDevice();
     InitWindow(2500, 1000, "miseq");
-    SetTargetFPS(FPS);
+    SetTargetFPS(120);
 
-    int code = load_library();
-    if (code != 0) return code;
     plug_init();
 
     while(!WindowShouldClose()) {
         if (IsKeyPressed(KEY_BACKSLASH)) {
             void *state = plug_pre_reload();
-            load_library();
+            int code = load_library();
+            if (!code) return 1;
             plug_post_reload(state);
             printf("Hotreloading successful\n");
         }
@@ -60,4 +60,5 @@ int main() {
 
     dlclose(plugin_handle);
     CloseWindow();
+    return 0;
 }

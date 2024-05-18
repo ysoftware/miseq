@@ -475,6 +475,11 @@ void plug_init() {
     create_sound();
 }
 
+void plug_cleanup() {
+    unload_sound();
+    CloseAudioDevice();
+}
+
 void *plug_pre_reload() {
     return state;
 }
@@ -540,8 +545,3 @@ void plug_update() {
 
     EndDrawing();
 }
-
-/*     unload_sound(); */
-/*     CloseAudioDevice(); */
-/*     CloseWindow(); */
-

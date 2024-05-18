@@ -1,5 +1,3 @@
-.SILENT: build
-
 warnings := -Wall -Wextra -g
 
 ifeq ($(OS), Windows_NT)
