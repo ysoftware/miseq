@@ -19,23 +19,23 @@ else
 				  -framework OpenGL 
 endif
 
-all: dir plug app
+all: miseq.app build build/libplug.so
 
-dir:
+build:
 	mkdir -p build
 
-midi:
+build/midi.o: src/midi.c
 	$(compiler) $(warnings) -fPIC -c src/midi.c -o build/midi.o
 
-wav:
+build/wav.o: src/wav.c
 	$(compiler) $(warnings) -fPIC -c src/wav.c -o build/wav.o
 
-ui:
+build/ui.o: src/ui.c
 	$(compiler) $(warnings) -fPIC -c src/ui.c -o build/ui.o 
 
-plug: midi wav ui
+build/libplug.so: build build/midi.o build/wav.o build/ui.o src/plug.c
 	$(compiler) $(warnings) -fPIC -c src/plug.c -o build/plug.o
 	$(compiler) $(warnings) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o
 
-app:
-	$(compiler) $(warnings) $(raylib) -o main.app src/main.c $(frameworks)
+miseq.app: src/main.c
+	$(compiler) $(warnings) $(raylib) -o miseq.app src/main.c $(frameworks)
