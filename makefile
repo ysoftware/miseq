@@ -36,7 +36,7 @@ ui:
 	$(compiler) $(warnings) -fPIC -c src/ui.c -o build/ui.o 
 
 plug: midi wav ui
-	$(compiler) $(warnings) -fPIC -c src/main.c -o build/plug.o
+	$(compiler) $(warnings) -fPIC -c src/plug.c -o build/plug.o
 	$(compiler) $(warnings) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o
 
 app:

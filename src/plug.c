@@ -14,14 +14,10 @@
 #include "wav.h"
 #include "ui.h"
 
-// TODO: implement hotloading
 // TODO: generate wave in a background thread
 // TODO: add undo for breaking actions: notes delete, generation
 
 #define NOTES_LIMIT 10000
-const int FPS = 120;
-const int SCREEN_WIDTH = 2500;
-const int SCREEN_HEIGHT = 1000;
 
 // predeclarations
 void create_waveform();
@@ -37,29 +33,6 @@ typedef struct {
 } State;
 
 State *state = NULL;
-
-// hotreloading
-
-void plug_init() {
-    state = malloc(sizeof(*state));
-    assert(state != NULL && "Buy more RAM lol");
-    memset(state, 0, sizeof(*state));
-
-    printf("hoooo hello\n");
-}
-
-void plug_update() {
-
-}
-
-void *plug_pre_reload() {
-    return state;
-}
-
-void plug_post_reload(void *old_state) {
-    state = old_state;
-
-}
 
 // functions
 
@@ -490,73 +463,85 @@ void create_waveform() {
     state->waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
 }
 
-int main() {
-    InitAudioDevice();
-    InitWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "miseq");
-    SetTargetFPS(FPS);
+// plugin life cycle
+
+void plug_init() {
+    state = malloc(sizeof(*state));
+    assert(state != NULL && "Buy more RAM lol");
+    memset(state, 0, sizeof(*state));
 
     create_notes();
     create_waveform();
     create_sound();
-    
-    while(!WindowShouldClose()) {
-        BeginDrawing();
-            ClearBackground(DARKGRAY);
-            ClearConsole();
+}
 
-            const int notes_panel_top_offset = 200;
-            if (!state->is_displaying_waveform) {
-                DrawNotes(
-                    20,
-                    notes_panel_top_offset,
-                    SCREEN_WIDTH-40,
-                    SCREEN_HEIGHT - notes_panel_top_offset - 20
-                );
-            } 
-            else {
-                DrawWaveform(
-                    20, 
-                    notes_panel_top_offset,
-                    SCREEN_WIDTH-40,
-                    SCREEN_HEIGHT - notes_panel_top_offset - 20
-                );
-            }
+void *plug_pre_reload() {
+    return state;
+}
 
-            if (DrawButton("Generate", 1, SCREEN_WIDTH - 170, 20, 160, 40)) {
-                unload_sound();
-                create_notes();
-                create_waveform();
-                create_sound();
-            }
+void plug_post_reload(void *old_state) {
+    state = old_state;
+}
 
-            if (DrawButton("Export MIDI", 2, SCREEN_WIDTH - 340, 20, 160, 40)) {
-                save_notes_midi_file(state->notes, state->notes_count);
-            }
+void plug_update() {
+    int screen_width = GetScreenWidth();
+    int screen_height = GetScreenHeight();
 
-            if (DrawButton("Export WAV", 3, SCREEN_WIDTH - 340, 70, 160, 40)) {
-                save_notes_wave_file(state->waveform_samples, 0);
-            }
+    BeginDrawing();
+        ClearBackground(DARKGRAY);
+        ClearConsole();
 
-            if (state->sound == NULL) {
-                DrawButton("Sound Init...", 4, SCREEN_WIDTH - 510, 20, 160, 40);
+        const int notes_panel_top_offset = 200;
+        if (!state->is_displaying_waveform) {
+            DrawNotes(
+                20,
+                notes_panel_top_offset,
+                screen_width-40,
+                screen_height - notes_panel_top_offset - 20
+            );
+        } 
+        else {
+            DrawWaveform(
+                20, 
+                notes_panel_top_offset,
+                screen_width-40,
+                screen_height - notes_panel_top_offset - 20
+            );
+        }
+
+        if (DrawButton("Generate", 1, screen_width - 170, 20, 160, 40)) {
+            unload_sound();
+            create_notes();
+            create_waveform();
+            create_sound();
+        }
+
+        if (DrawButton("Export MIDI", 2, screen_width - 340, 20, 160, 40)) {
+            save_notes_midi_file(state->notes, state->notes_count);
+        }
+
+        if (DrawButton("Export WAV", 3, screen_width - 340, 70, 160, 40)) {
+            save_notes_wave_file(state->waveform_samples, 0);
+        }
+
+        if (state->sound == NULL) {
+            DrawButton("Sound Init...", 4, screen_width - 510, 20, 160, 40);
+        } else {
+            if (IsSoundPlaying(*state->sound)) {
+                if (DrawButton("Stop", 4, screen_width - 510, 20, 160, 40)) {
+                    StopSound(*state->sound);
+                }
             } else {
-                if (IsSoundPlaying(*state->sound)) {
-                    if (DrawButton("Stop", 4, SCREEN_WIDTH - 510, 20, 160, 40)) {
-                        StopSound(*state->sound);
-                    }
-                } else {
-                    if (DrawButton("Play", 4, SCREEN_WIDTH - 510, 20, 160, 40)) {
-                        PlaySound(*state->sound);
-                    }
+                if (DrawButton("Play", 4, screen_width - 510, 20, 160, 40)) {
+                    PlaySound(*state->sound);
                 }
             }
+        }
 
-        EndDrawing();
-    }
-
-    unload_sound();
-
-    CloseAudioDevice();
-    CloseWindow();
+    EndDrawing();
 }
+
+/*     unload_sound(); */
+/*     CloseAudioDevice(); */
+/*     CloseWindow(); */
 
