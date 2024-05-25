@@ -478,6 +478,8 @@ void plug_init() {
 void plug_cleanup() {
     unload_sound();
     CloseAudioDevice();
+    free(state);
+    state = NULL;
 }
 
 void *plug_pre_reload() {
@@ -489,6 +491,7 @@ void plug_post_reload(void *old_state) {
 }
 
 void plug_update() {
+    assert(state != NULL && "Plugin state is not initialized.");
     int screen_width = GetScreenWidth();
     int screen_height = GetScreenHeight();
 

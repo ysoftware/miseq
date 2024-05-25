@@ -38,8 +38,7 @@ defer:
 }
 
 int main() {
-    int code = load_library();
-    if (!code) return 1;
+    if (!load_library()) return 1;
 
     InitAudioDevice();
     InitWindow(2500, 1000, "miseq");
@@ -50,14 +49,14 @@ int main() {
     while(!WindowShouldClose()) {
         if (IsKeyPressed(KEY_BACKSLASH)) {
             void *state = plug_pre_reload();
-            int code = load_library();
-            if (!code) return 1;
+            if (!load_library()) return 1;
             plug_post_reload(state);
             printf("Hotreloading successful\n");
         }
         plug_update();
     }
 
+    plug_cleanup();
     dlclose(plugin_handle);
     CloseWindow();
     return 0;
