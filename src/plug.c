@@ -16,6 +16,7 @@
 
 // TODO: generate wave in a background thread
 // TODO: add undo for breaking actions: notes delete, generation
+// TODO: playback tracking
 
 #define NOTES_LIMIT 10000
 
