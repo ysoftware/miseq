@@ -13,7 +13,7 @@ const float theta = 0.000005f;
 int console_lines_this_frame = 0;
 int interacting_button_id = 0;
 
-void process_scroll_interaction(struct ScrollZoom *state) {
+void process_scroll_interaction(ScrollZoom *state) {
     double smoothing_factor = GetFrameTime() * 10;
 
     // scroll controls

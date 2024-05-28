@@ -25,11 +25,16 @@ void create_waveform();
 void create_sound();
 
 typedef struct {
+    Vector2 selection_first_point;
+    ScrollZoom notes_scroll_zoom_state;
+    ScrollZoom waveform_scroll_zoom_state;
+
     bool is_displaying_waveform;
-    struct Note notes[NOTES_LIMIT];
+    Note notes[NOTES_LIMIT];
     int notes_count;
     float waveform_samples[2048 * NOTES_LIMIT];
     int waveform_samples_count;
+
     Sound *sound;
 } State;
 
@@ -65,7 +70,7 @@ void create_notes() {
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
         uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
     
-        state->notes[state->notes_count] = (struct Note) {
+        state->notes[state->notes_count] = (Note) {
             key,
             velocity,
             current_tick,
@@ -85,34 +90,27 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     // draw notes
     if (state->notes_count == 0) return;
 
-    static struct ScrollZoom scroll_zoom_state = {
-        .zoom_x = 0.5f,
-        .zoom_y = 0.5f,
-        .target_zoom_x = 0.5f,
-        .target_zoom_y = 0.5f
-    };
-
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-        scroll_zoom_state.target_zoom_x = 0.5f;
-        scroll_zoom_state.target_zoom_y = 0.5f;
-        scroll_zoom_state.target_scroll = 0;
+        state->notes_scroll_zoom_state.target_zoom_x = 0.5f;
+        state->notes_scroll_zoom_state.target_zoom_y = 0.5f;
+        state->notes_scroll_zoom_state.target_scroll = 0;
     } else {
-        process_scroll_interaction(&scroll_zoom_state);
+        process_scroll_interaction(&state->notes_scroll_zoom_state);
     }
 
-    float key_height = 3 + scroll_zoom_state.zoom_y * 10;
-    float tick_width = 0.05 + scroll_zoom_state.zoom_x * 3;
+    float key_height = 3 + state->notes_scroll_zoom_state.zoom_y * 10;
+    float tick_width = 0.05 + state->notes_scroll_zoom_state.zoom_x * 3;
     float content_size = tick_width * state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
     assert(content_size > 0);
 
-    float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
+    float scroll_offset = state->notes_scroll_zoom_state.scroll * (content_size - view_width);
 
     // for the next frame
-    scroll_zoom_state.scroll_speed = view_width / content_size;
-    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
+    state->notes_scroll_zoom_state.scroll_speed = view_width / content_size;
+    if (content_size < view_width)  state->notes_scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
     // background
-    struct Rectangle background_rect = {
+    Rectangle background_rect = {
         fmax(view_x, view_x-scroll_offset),
         view_y,
         fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
@@ -122,61 +120,60 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
     // selection state
     bool did_edit_notes = false;
-    static Vector2 selection_first_point;
     Vector2 mouse_position = GetMousePosition();
-    struct Rectangle view_rectangle = (struct Rectangle) { view_x, view_y, view_width, view_height };
+    Rectangle view_rectangle = (Rectangle) { view_x, view_y, view_width, view_height };
     bool is_mouse_in_bounds = CheckCollisionPointRec(mouse_position, view_rectangle);
     
-    bool is_selecting = !Vector2Equals(selection_first_point, Vector2Zero());
+    bool is_selecting = !Vector2Equals(state->selection_first_point, Vector2Zero());
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !is_selecting && is_mouse_in_bounds) {
-        selection_first_point = mouse_position;
+        state->selection_first_point = mouse_position;
         is_selecting = true;
     }
 
-    struct Rectangle selection_rectangle;
+    Rectangle selection_rectangle;
 
     // selection rect
     if ((IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) && is_selecting) {
         Vector2 selection_second_point = mouse_position;
 
-        float start_x = fmin(selection_first_point.x, selection_second_point.x);
-        float start_y = fmin(selection_first_point.y, selection_second_point.y);
-        Vector2 start = (struct Vector2) {
+        float start_x = fmin(state->selection_first_point.x, selection_second_point.x);
+        float start_y = fmin(state->selection_first_point.y, selection_second_point.y);
+        Vector2 start = (Vector2) {
             fmin(view_x + view_width, fmax(view_x, start_x)),
             fmin(view_y + view_height, fmax(view_y, start_y)),
         };
 
-        float end_x = fmax(selection_first_point.x, selection_second_point.x);
-        float end_y = fmax(selection_first_point.y, selection_second_point.y);
-        Vector2 end = (struct Vector2) {
+        float end_x = fmax(state->selection_first_point.x, selection_second_point.x);
+        float end_y = fmax(state->selection_first_point.y, selection_second_point.y);
+        Vector2 end = (Vector2) {
             fmin(view_x + view_width, fmax(view_x, end_x)),
             fmin(view_y + view_height, fmax(view_y, end_y)),
         };
 
         Vector2 size = Vector2Subtract(end, start);
-        selection_rectangle = (struct Rectangle) { start.x, start.y, size.x, size.y };
+        selection_rectangle = (Rectangle) { start.x, start.y, size.x, size.y };
        
         if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) {
             DrawRectangleRec(selection_rectangle, BLUE);
         } else {
-            selection_first_point = Vector2Zero();
+            state->selection_first_point = Vector2Zero();
         }
     } else {
-        selection_first_point = Vector2Zero();
+        state->selection_first_point = Vector2Zero();
     }
 
     for (int i = 0; i < state->notes_count; i++) {
-        struct Note note = state->notes[i];
+        Note note = state->notes[i];
         if (note.is_deleted)  continue;
 
-        struct Rectangle note_rect = {
+        Rectangle note_rect = {
             view_x - scroll_offset + (note.start_tick * tick_width),
             view_y + (view_height / 2) + (64 - note.key) * key_height,
             (note.end_tick - note.start_tick) * tick_width,
             key_height 
         };
 
-        struct Rectangle note_clipped_rect = GetCollisionRec(background_rect, note_rect);
+        Rectangle note_clipped_rect = GetCollisionRec(background_rect, note_rect);
         bool is_inside_selection_rect = CheckCollisionRecs(selection_rectangle, note_rect);
 
         Color note_color; 
@@ -218,42 +215,35 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
     if (state->waveform_samples_count == 0)  return;
 
-    static struct ScrollZoom scroll_zoom_state = {
-        .zoom_x = 0.5f,
-        .zoom_y = 0.5f,
-        .target_zoom_x = 0.5f,
-        .target_zoom_y = 0.5f
-    };
-
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
-        scroll_zoom_state.target_zoom_x = 0.5f;
-        scroll_zoom_state.target_zoom_y = 0.5f;
-        scroll_zoom_state.target_scroll = 0;
+        state->waveform_scroll_zoom_state.target_zoom_x = 0.5f;
+        state->waveform_scroll_zoom_state.target_zoom_y = 0.5f;
+        state->waveform_scroll_zoom_state.target_scroll = 0;
     } else {
-        process_scroll_interaction(&scroll_zoom_state);
+        process_scroll_interaction(&state->waveform_scroll_zoom_state);
     }
 
     int samples_to_draw_count = state->waveform_samples_count;
 
     // TODO: select proper value for wave_amplitude
-    float sample_width = scroll_zoom_state.zoom_x * 1.0f;
-    float wave_amplitude = 100 + scroll_zoom_state.zoom_y * (view_height * 3 - 100);
+    float sample_width = state->waveform_scroll_zoom_state.zoom_x * 1.0f;
+    float wave_amplitude = 100 + state->waveform_scroll_zoom_state.zoom_y * (view_height * 3 - 100);
 
     float content_size = sample_width * samples_to_draw_count;
-    float scroll_offset = scroll_zoom_state.scroll * (content_size - view_width);
+    float scroll_offset = state->waveform_scroll_zoom_state.scroll * (content_size - view_width);
     assert(content_size > 0);
 
     // for the next frame
-    scroll_zoom_state.scroll_speed = view_width / content_size;
-    if (content_size < view_width)  scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
+    state->waveform_scroll_zoom_state.scroll_speed = view_width / content_size;
+    if (content_size < view_width)  state->waveform_scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
 
     // background
     // TODO: abstract these calculations for 'normal scrollable content views'
-    struct Rectangle background_rect = {
+    Rectangle background_rect = {
         fmax(view_x, view_x-scroll_offset),
         view_y,
         fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
-        view_height, 
+        view_height
     };
     DrawRectangleRec(background_rect, GRAY);
 
@@ -266,18 +256,18 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
         float posX = i * sample_width - scroll_offset;
         float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
-        Vector2 position = { view_x + posX, view_y + posY };
-        Vector2 size = { 2, view_height / 50 };
+        Rectangle sample_rect = { view_x + posX, view_y + posY, 2, view_height / 50 };
+        Rectangle sample_clipped_rect = GetCollisionRec(background_rect, sample_rect);
 
-        if (posX < view_width && posX > 0 && posY < view_height && posY > 0) {
-            DrawRectangleV(position, size, BLACK);
+        if (sample_clipped_rect.width > 0) {
+            DrawRectangleRec(sample_rect, BLACK);
         }
 
-        if (i % samples_per_section == 0) {
-            struct Rectangle separator_rect = {
+        if (i % samples_per_section == 0 && i > 0) {
+            Rectangle separator_rect = {
                 view_x - scroll_offset + (i * sample_width),
                 view_y,
-                5,
+                3,
                 view_height
             };
             DrawRectangleRec(separator_rect, DARKGRAY);
@@ -296,7 +286,7 @@ static float midiNoteToFrequency(uint8_t note) {
 }
 
 typedef struct {
-    struct Note* notes;
+    Note* notes;
     int notes_count;
     uint32_t current_frame;
 
@@ -312,7 +302,7 @@ typedef struct {
 
 // TODO: export .wav in wav.h
 
-static int note_identifier(struct Note note) {
+static int note_identifier(Note note) {
     return 1000000000 + note.start_tick * 1000 + note.key;
 }
 
@@ -330,7 +320,7 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
             uint32_t current_tick = data->current_frame / frames_per_tick;
 
             for (int note_index = 0; note_index < data->notes_count; note_index++) {
-                struct Note note = data->notes[note_index];
+                Note note = data->notes[note_index];
                 if (note.is_deleted)  continue;
 
                 // TODO: test various polyphony settings
@@ -424,7 +414,7 @@ void unload_sound() {
 void create_sound() {
     unload_sound();
 
-    Wave wave = (struct Wave) {
+    Wave wave = (Wave) {
         .frameCount = state->waveform_samples_count,
         .sampleRate = SAMPLE_RATE,
         .sampleSize = sizeof(float),
@@ -474,6 +464,20 @@ void plug_init() {
     create_notes();
     create_waveform();
     create_sound();
+
+    state->waveform_scroll_zoom_state = (ScrollZoom) {
+        .zoom_x = 0.5f,
+        .zoom_y = 0.5f,
+        .target_zoom_x = 0.5f,
+        .target_zoom_y = 0.5f
+    };
+
+    state->notes_scroll_zoom_state = (ScrollZoom) {
+        .zoom_x = 0.5f,
+        .zoom_y = 0.5f,
+        .target_zoom_x = 0.5f,
+        .target_zoom_y = 0.5f
+    };
 }
 
 void plug_cleanup() {

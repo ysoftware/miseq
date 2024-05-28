@@ -8,7 +8,7 @@
 
 // scroll value: 0.0 -> 1.0, only one axis, can bounce by going negative or above 1.0
 // zoom values: 0.01 -> 0.5 -> 0.99, 0.5 is the default
-struct ScrollZoom {
+typedef struct {
     float scroll_speed;
     float scroll;
     float target_scroll;
@@ -16,9 +16,9 @@ struct ScrollZoom {
     float target_zoom_x;
     float zoom_y;
     float target_zoom_y;
-};
+} ScrollZoom;
 
-void process_scroll_interaction(struct ScrollZoom *state);
+void process_scroll_interaction(ScrollZoom *state);
 bool DrawButtonRectangle(char* title, int id, Rectangle frame);
 bool DrawButton(char* title, int id, int x, int y, int width, int height);
 void DrawConsoleLine(char* string);

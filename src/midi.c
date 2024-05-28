@@ -9,12 +9,12 @@
 
 #include "midi.h"
 
-struct NoteEvent {
+typedef struct {
     uint8_t key;
     uint8_t velocity;
     uint32_t tick;
     bool is_on;
-};
+} NoteEvent;
 
 uint32_t le_to_be(uint32_t num) {
     uint8_t b[4] = {0};
@@ -101,32 +101,32 @@ static void append_header(void *data, int *size) {
 }
 
 static int compare_note_events(const void *a, const void *b) {
-    const struct NoteEvent *note1 = (const struct NoteEvent *)a;
-    const struct NoteEvent *note2 = (const struct NoteEvent *)b;
+    const NoteEvent *note1 = (const NoteEvent *)a;
+    const NoteEvent *note2 = (const NoteEvent *)b;
     if (note1->tick < note2->tick) return -1;
     else if (note1->tick > note2->tick) return 1;
     else return 0;
 }
 
-static void append_events_from_notes(void *data, int *size, struct Note *notes, int notes_count) {
+static void append_events_from_notes(void *data, int *size, Note *notes, int notes_count) {
     int events_count = notes_count * 2;
-    struct NoteEvent events[events_count];
+    NoteEvent events[events_count];
 
     for (int i = 0; i < notes_count; i++) {
-        struct Note note = notes[i];
-        events[i] = (struct NoteEvent) {
+        Note note = notes[i];
+        events[i] = (NoteEvent) {
             note.key, note.velocity, note.start_tick, true
         };
-        events[notes_count + i] = (struct NoteEvent) {
+        events[notes_count + i] = (NoteEvent) {
             note.key, note.velocity, note.end_tick, false
         };
     }
 
-    qsort(events, events_count, sizeof(struct NoteEvent), compare_note_events);
+    qsort(events, events_count, sizeof(NoteEvent), compare_note_events);
 
     uint32_t current_tick = 0;    
     for (int i = 0; i < events_count; i++) {
-        struct NoteEvent event = events[i];
+        NoteEvent event = events[i];
 
         append_delta_time(data, size, event.tick - current_tick);
         current_tick = event.tick;
@@ -182,9 +182,9 @@ static void write_data(const char* filename, void* data, int size) {
     printf("Written %d bytes to %s.\n", size, filename);
 }
 
-void save_notes_midi_file(struct Note *notes, int notes_count) {
+void save_notes_midi_file(Note *notes, int notes_count) {
     int size = 0;
-    void *data = malloc(notes_count * sizeof(struct NoteEvent) + 100);
+    void *data = malloc(notes_count * sizeof(NoteEvent) + 100);
 
     append_header(data, &size);
 

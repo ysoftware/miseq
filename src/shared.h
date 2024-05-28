@@ -1,14 +1,14 @@
 #ifndef SHARED_INCLUDES
 #define SHARED_INCLUDES
 
-struct Note {
+typedef struct {
     uint8_t key;
     uint8_t velocity;
     uint32_t start_tick;
     uint32_t end_tick;
     bool is_selected;
     bool is_deleted;
-};
+} Note;
 
 // audio setup
 #define MAX_POLYPHONY       16
