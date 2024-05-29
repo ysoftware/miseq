@@ -4,6 +4,7 @@ export.mid
 portaudio-19.7.0/x64/Release/*
 portaudio_x64.dll
 /build
-miseq.app.dSYM/Contents/Info.plist
-miseq.app.dSYM/Contents/Resources/Relocations/aarch64/miseq.app.yml
+miseq.app.dSYM
 1.mid
+miseq.xcodeproj/project.xcworkspace/*
+miseq.xcodeproj/xcuserdata/iaroslav.erokhin.xcuserdatad/xcschemes/*
