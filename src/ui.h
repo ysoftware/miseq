@@ -22,4 +22,4 @@ void process_scroll_interaction(ScrollZoom *state);
 bool DrawButtonRectangle(char* title, int id, Rectangle frame);
 bool DrawButton(char* title, int id, int x, int y, int width, int height);
 void DrawConsoleLine(char* string);
-void ClearConsole();
+void ClearConsole(void);

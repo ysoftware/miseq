@@ -165,6 +165,6 @@ void DrawConsoleLine(char* string) {
     console_lines_this_frame += 1;
 }
 
-void ClearConsole() {
+void ClearConsole(void) {
     console_lines_this_frame = 0;
 }

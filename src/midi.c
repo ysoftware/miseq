@@ -31,7 +31,7 @@ uint32_t le_to_be(uint32_t num) {
 
 static void append_string(void *data, int *size, const char* bytes) {
     char* pointer = (char*)data + *size;
-    int len = strlen(bytes);
+    unsigned long len = strlen(bytes);
     memcpy(pointer, bytes, len);
     *size += len;
 }

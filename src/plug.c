@@ -21,8 +21,8 @@
 #define NOTES_LIMIT 10000
 
 // predeclarations
-void create_waveform();
-void create_sound();
+void create_waveform(void);
+void create_sound(void);
 
 typedef struct {
     Vector2 selection_first_point;
@@ -42,13 +42,13 @@ State *state = NULL;
 
 // functions
 
-double random_value() {
+double random_value(void) {
     double value = (double)GetRandomValue(0, 100000) / 100000;
     return value;
 }
 
-void create_notes() {
-    srand(time(NULL));
+void create_notes(void) {
+    srand((uint) time(0));
     state->notes_count = 0;
 
     uint32_t current_tick = 0;
@@ -130,7 +130,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         is_selecting = true;
     }
 
-    Rectangle selection_rectangle;
+    Rectangle selection_rectangle = { };
 
     // selection rect
     if ((IsMouseButtonDown(MOUSE_BUTTON_LEFT) || IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) && is_selecting) {
@@ -402,7 +402,7 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
     }
 }
 
-void unload_sound() {
+void unload_sound(void) {
     if (state->sound == NULL)  return;
     StopSound(*state->sound);
     UnloadSound(*state->sound);
@@ -411,7 +411,7 @@ void unload_sound() {
 }
 
 // TODO: audio error handling
-void create_sound() {
+void create_sound(void) {
     unload_sound();
 
     Wave wave = (Wave) {
@@ -426,7 +426,7 @@ void create_sound() {
     *state->sound = LoadSoundFromWave(wave);
 }
 
-void create_waveform() {
+void create_waveform(void) {
     SoundState data = {
         .notes = state->notes,
         .notes_count = state->notes_count,
@@ -456,22 +456,22 @@ void create_waveform() {
 
 // plugin life cycle
 
-void plug_init() {
+void plug_init(void) {
     state = malloc(sizeof(*state));
     assert(state != NULL && "Buy more RAM lol");
     memset(state, 0, sizeof(*state));
-
+    
     create_notes();
     create_waveform();
     create_sound();
-
+    
     state->waveform_scroll_zoom_state = (ScrollZoom) {
         .zoom_x = 0.5f,
         .zoom_y = 0.5f,
         .target_zoom_x = 0.5f,
         .target_zoom_y = 0.5f
     };
-
+    
     state->notes_scroll_zoom_state = (ScrollZoom) {
         .zoom_x = 0.5f,
         .zoom_y = 0.5f,
@@ -480,14 +480,14 @@ void plug_init() {
     };
 }
 
-void plug_cleanup() {
+void plug_cleanup(void) {
     unload_sound();
     CloseAudioDevice();
     free(state);
     state = NULL;
 }
 
-void *plug_pre_reload() {
+void *plug_pre_reload(void) {
     return state;
 }
 
@@ -495,7 +495,7 @@ void plug_post_reload(void *old_state) {
     state = old_state;
 }
 
-void plug_update() {
+void plug_update(void) {
     assert(state != NULL && "Plugin state is not initialized.");
     int screen_width = GetScreenWidth();
     int screen_height = GetScreenHeight();
