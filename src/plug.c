@@ -250,7 +250,6 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     // draw section separators every 1 sec
     int samples_per_section = SAMPLE_RATE;
 
-    // TODO: adjust this drawing code to bounds check
     for (int i = 0; i < samples_to_draw_count; i++) {
         float value = state->waveform_samples[i * 2];
 
