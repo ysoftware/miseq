@@ -1,14 +1,14 @@
 warnings := -Wall -Wextra -g
 
 ifeq ($(OS), Windows_NT)
-	raylib := -Ilib/raylib-5.0_win/include -Llib/raylib-5.0_win/lib -lraylib
+	raylib := -Ilib/raylib-5.0_win/include -Llib/raylib-5.0_win/lib
 	compiler := gcc -std=c99
-	frameworks := -lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm
+	frameworks := -lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm -lraylib
 else ifeq ($(shell uname), Linux)
-	raylib := -lraylib
+	raylib := -Ilib/raylib-5.0_linux_i386/include
 	compiler := clang
-	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11
-else
+	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11 -lraylib
+else # macos
 	raylib := -Ilib/raylib-5.0_macos/include
 	compiler := clang
 	frameworks := -framework CoreAudio -framework OpenGL \
@@ -36,7 +36,7 @@ build/ui.o: src/ui.c
 
 build/libplug.so: build build/midi.o build/wav.o build/ui.o src/plug.c
 	$(compiler) $(warnings) $(raylib) -fPIC -c src/plug.c -o build/plug.o
-	$(compiler) $(warnings) $(raylib) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o $(frameworks)
+	$(compiler) $(warnings) $(raylib) $(frameworks) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o
 
 miseq.app: src/main.c
-	$(compiler) $(warnings) $(raylib) -o miseq.app src/main.c $(frameworks)
+	$(compiler) $(warnings) $(raylib) $(frameworks) -o miseq.app src/main.c
