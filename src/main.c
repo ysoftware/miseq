@@ -11,13 +11,8 @@ void (*plug_post_reload)(void*);
 
 bool load_library(void) {
     if (plugin_handle) dlclose(plugin_handle);
-    
-#if defined(__APPLE__) && defined(__MACH__)
-    plugin_handle = dlopen("./build/libplug.dylib", RTLD_LAZY);
-#else
+
     plugin_handle = dlopen("./build/libplug.so", RTLD_LAZY);
-#endif
-    
     if (!plugin_handle) goto defer;
 
     plug_init = dlsym(plugin_handle, "plug_init");

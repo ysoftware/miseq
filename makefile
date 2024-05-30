@@ -7,18 +7,17 @@ ifeq ($(OS), Windows_NT)
 else ifeq ($(shell uname), Linux)
 	raylib := -lraylib
 	compiler := clang
-	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11 
+	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11
 else
-	raylib := -Ilib/raylib-5.0_macos/include 
+	raylib := -Ilib/raylib-5.0_macos/include -Llib/raylib-5.0_macos/lib
 	compiler := clang
-	frameworks := -framework CoreAudio \
+	frameworks := -framework CoreAudio -framework OpenGL \
 				  -framework AudioToolbox -framework AudioUnit \
 				  -framework CoreServices -framework Carbon \
 				  -framework CoreVideo -framework IOKit \
 				  -framework Cocoa -framework GLUT \
-				  -framework OpenGL \
 				  -framework CoreFoundation -framework AppKit \
-				  lib/raylib-5.0_macos/lib/libraylib.a
+				  -lraylib
 endif
 
 all: miseq.app build build/libplug.so

@@ -48,7 +48,7 @@ double random_value(void) {
 }
 
 void create_notes(void) {
-    srand((uint) time(0));
+    srand(time(0));
     state->notes_count = 0;
 
     uint32_t current_tick = 0;
