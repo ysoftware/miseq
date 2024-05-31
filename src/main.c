@@ -41,6 +41,8 @@ defer:
 int main(void) {
     if (!load_library()) return 1;
 
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+
     InitAudioDevice();
     InitWindow(1200, 800, "miseq");
     SetTargetFPS(120);
