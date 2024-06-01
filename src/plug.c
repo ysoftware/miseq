@@ -87,15 +87,12 @@ void create_notes(void) {
 // USER INTERFACE
 
 void DrawNotes(float view_x, float view_y, float view_width, float view_height) {
-    // draw notes
     if (state->notes_count == 0) return;
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
         state->notes_scroll_zoom_state.target_zoom_x = 0.5f;
         state->notes_scroll_zoom_state.target_zoom_y = 0.5f;
         state->notes_scroll_zoom_state.target_scroll = 0;
-    } else {
-        process_scroll_interaction(&state->notes_scroll_zoom_state);
     }
 
     float key_height = 3 + state->notes_scroll_zoom_state.zoom_y * 10;
@@ -103,19 +100,15 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     float content_size = tick_width * state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
     assert(content_size > 0);
 
-    float scroll_offset = state->notes_scroll_zoom_state.scroll * (content_size - view_width);
+    float scroll_offset = 0;
+    process_scroll_interaction(
+        &state->notes_scroll_zoom_state, 
+        content_size, 
+        view_width,
+        &scroll_offset
+    );
 
-    // for the next frame
-    state->notes_scroll_zoom_state.scroll_speed = view_width / content_size;
-    if (content_size < view_width)  state->notes_scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
-
-    // background
-    Rectangle background_rect = {
-        fmax(view_x, view_x-scroll_offset),
-        view_y,
-        fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
-        view_height
-    };
+    Rectangle background_rect = calculate_content_rect(view_x, view_width, view_y, view_height, content_size, scroll_offset);
     DrawRectangleRec(background_rect, GRAY);
 
     // selection state
@@ -219,38 +212,29 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         state->waveform_scroll_zoom_state.target_zoom_x = 0.5f;
         state->waveform_scroll_zoom_state.target_zoom_y = 0.5f;
         state->waveform_scroll_zoom_state.target_scroll = 0;
-    } else {
-        process_scroll_interaction(&state->waveform_scroll_zoom_state);
     }
 
-    int samples_to_draw_count = state->waveform_samples_count;
-
-    // TODO: select proper value for wave_amplitude
+    /* // TODO: select proper value for wave_amplitude */
     float sample_width = state->waveform_scroll_zoom_state.zoom_x * 1.0f;
     float wave_amplitude = 100 + state->waveform_scroll_zoom_state.zoom_y * (view_height * 3 - 100);
-
-    float content_size = sample_width * samples_to_draw_count;
-    float scroll_offset = state->waveform_scroll_zoom_state.scroll * (content_size - view_width);
+    float content_size = sample_width * state->waveform_samples_count;
     assert(content_size > 0);
 
-    // for the next frame
-    state->waveform_scroll_zoom_state.scroll_speed = view_width / content_size;
-    if (content_size < view_width)  state->waveform_scroll_zoom_state.target_scroll = 0.0f; // when content is not wide enough, reset scroll
+    float scroll_offset = 0;
+    process_scroll_interaction(
+        &state->waveform_scroll_zoom_state, 
+        content_size, 
+        view_width,
+        &scroll_offset
+    );
 
-    // background
-    // TODO: abstract these calculations for 'normal scrollable content views'
-    Rectangle background_rect = {
-        fmax(view_x, view_x-scroll_offset),
-        view_y,
-        fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
-        view_height
-    };
+    Rectangle background_rect = calculate_content_rect(view_x, view_width, view_y, view_height, content_size, scroll_offset);
     DrawRectangleRec(background_rect, GRAY);
 
     // draw section separators every 1 sec
     int samples_per_section = SAMPLE_RATE;
 
-    for (int i = 0; i < samples_to_draw_count; i++) {
+    for (int i = 0; i < state->waveform_samples_count; i++) {
         float value = state->waveform_samples[i * 2];
 
         float posX = i * sample_width - scroll_offset;

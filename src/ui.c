@@ -13,7 +13,18 @@ const float theta = 0.000005f;
 int console_lines_this_frame = 0;
 int interacting_button_id = 0;
 
-void process_scroll_interaction(ScrollZoom *state) {
+Rectangle calculate_content_rect(float view_x, float view_width, float view_y, float view_height, float content_size, float scroll_offset) {
+    return (Rectangle) {
+        fmax(view_x, view_x-scroll_offset),
+        view_y,
+        fmin(view_width+fmin(0, scroll_offset), content_size-fmax(0, scroll_offset)),
+        view_height
+    };
+}
+
+void process_scroll_interaction(ScrollZoom *state, float content_size, float view_width, float *scroll_offset) {
+    if (content_size <= 0)  return;
+
     double smoothing_factor = GetFrameTime() * 10;
 
     // scroll controls
@@ -78,6 +89,14 @@ void process_scroll_interaction(ScrollZoom *state) {
     if (diff_zoom_y < theta && diff_zoom_y > -theta) {
         state->zoom_y = state->target_zoom_y;
     }
+
+    *scroll_offset = state->scroll * (content_size - view_width);
+
+    // for the next frame
+    state->scroll_speed = view_width / content_size;
+
+    // when content is not wide enough, reset scroll
+    if (content_size < view_width)  state->target_scroll = 0.0f; 
 }
 
 bool DrawButtonRectangle(char* title, int id, Rectangle frame) {

@@ -18,7 +18,12 @@ typedef struct {
     float target_zoom_y;
 } ScrollZoom;
 
-void process_scroll_interaction(ScrollZoom *state);
+// processes scroll with mouse wheel and default modifiers (shift to go faster, ctrl to zoom)
+void process_scroll_interaction(ScrollZoom *state, float content_size, float view_width, float *scroll_offset);
+
+// calculates visible content rect for horizontal scroll
+Rectangle calculate_content_rect(float view_x, float view_width, float view_y, float view_height, float content_size, float content_offset);
+
 bool DrawButtonRectangle(char* title, int id, Rectangle frame);
 bool DrawButton(char* title, int id, int x, int y, int width, int height);
 void DrawConsoleLine(char* string);
