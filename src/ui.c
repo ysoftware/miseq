@@ -158,7 +158,7 @@ bool DrawButton(char* title, int id, int x, int y, int width, int height) {
 }
 
 void DrawConsoleLine(char* string) {
-    int console_width = 600;
+    int console_width = GetScreenWidth() / 2;
     int line_height = 25;
     int console_top_offset = 10;
 

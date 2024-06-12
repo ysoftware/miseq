@@ -28,6 +28,7 @@ typedef struct {
     Vector2 selection_first_point;
     ScrollZoom notes_scroll_zoom_state;
     ScrollZoom waveform_scroll_zoom_state;
+    char *error_message;
 
     bool is_displaying_waveform;
     Note notes[NOTES_LIMIT];
@@ -54,15 +55,15 @@ void create_notes(void) {
     uint32_t current_tick = 0;
 
     double base_velocity = 80;
-    double base_key = 64;
+    double base_key = 100;
     double base_note_duration = 20;
 
     double wave1_random = 20 * random_value();
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 100; i++) {
-        double wave1 = cos(i / wave1_random) * 30 * random_value();
+    for (double i = 0; i < 10; i++) {
+        double wave1 = cos(i / wave1_random) * 60 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 10 * random_value();
 
@@ -208,6 +209,8 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
     if (state->waveform_samples_count == 0)  return;
 
+    Console("Samples count %d", state->waveform_samples_count);
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
         state->waveform_scroll_zoom_state.target_zoom_x = 0.5f;
         state->waveform_scroll_zoom_state.target_zoom_y = 0.5f;
@@ -289,11 +292,13 @@ static int note_identifier(Note note) {
     return 1000000000 + note.start_tick * 1000 + note.key;
 }
 
-static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t frames_per_buffer, int frames_per_tick) {
+static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t frames_per_buffer, int frames_per_tick) {
+    state->error_message = NULL;
+
     float attack_frames_length = SAMPLE_RATE / 25;
     float attack_decrement = 1.0f / attack_frames_length;
 
-    float release_frames_length = SAMPLE_RATE / 3;
+    float release_frames_length = SAMPLE_RATE / 0.2;
     float release_increment = 1.0f / release_frames_length;
 
     for (uint32_t buf_frame = 0; buf_frame < frames_per_buffer; buf_frame++) {
@@ -317,22 +322,23 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
                             data->active_notes[i].identifier = note_identifier(note);
                             break;
                         } else if (i == MAX_POLYPHONY - 1) {
-                            printf("[ERROR] MAX_POLYPHONY exceeded. Starting a midi event is impossible.\n");
-                            assert(false);
+                            state->error_message = "MAX_POLYPHONY exceeded. Starting a midi event is impossible.";
+                            printf("%s\n", state->error_message);
+                            return false;
                         }
                     }
                 } else if (current_tick == note.end_tick) {
                     int note_id = note_identifier(note);
 
                     for (int i = 0; i < MAX_POLYPHONY; i++) {
-
                         if (data->active_notes[i].identifier == note_id) { // search for the note by its identifier
                             assert(data->active_notes[i].active);
                             data->active_notes[i].is_releasing = true;
                             break;
                         } else if (i == MAX_POLYPHONY - 1) {
-                            printf("[ERROR] MAX_POLYPHONY exceeded. Stopping a midi event is impossible.\n");
-                            assert(false);
+                            state->error_message = "MAX_POLYPHONY exceeded. Stopping a midi event is impossible.";
+                            printf("%s\n", state->error_message);
+                            return false;
                         }
                     }
                 }
@@ -383,6 +389,8 @@ static void create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
         *buffer++ = mixedSample; // right
         data->current_frame++;
     }
+
+    return true;
 }
 
 void unload_sound(void) {
@@ -396,6 +404,9 @@ void unload_sound(void) {
 // TODO: audio error handling
 void create_sound(void) {
     unload_sound();
+    state->sound = NULL;
+
+    if (state->waveform_samples_count == 0)  return;
 
     Wave wave = (Wave) {
         .frameCount = state->waveform_samples_count,
@@ -422,12 +433,17 @@ void create_waveform(void) {
     int frames_per_tick = SAMPLE_RATE / 100;
 
     for (current_frame = 0; current_frame < 10000; current_frame++) {
-        create_samples_from_notes(
+        bool success = create_samples_from_notes(
             &state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
             &data, 
             FRAMES_PER_BUFFER,
             frames_per_tick
         );
+
+        if (!success) {
+            state->waveform_samples_count = 0;
+            return;
+        }
 
         bool did_produce_silence = state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0;
         uint32_t current_tick = data.current_frame / frames_per_tick;
@@ -532,6 +548,10 @@ void plug_update(void) {
                     PlaySound(*state->sound);
                 }
             }
+        }
+    
+        if (state->error_message != NULL) {
+            DrawConsoleLine(state->error_message);
         }
 
     EndDrawing();
