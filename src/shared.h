@@ -13,12 +13,8 @@ typedef struct {
 // audio setup
 #define MAX_POLYPHONY       16
 #define A4_FREQUENCY        700
-#define G3_FREQUENCY        196
 #define FRAMES_PER_BUFFER   256
 #define NUMBER_OF_CHANNELS  2
 #define SAMPLE_RATE         (44100)
-#define SAMPLE_ZERO         (0)
-#define DOUBLE_TO_SAMPLE(x) (SAMPLE_ZERO + (SAMPLE_t)(32767 * (x)))
-#define FORMAT_NAME         "Signed 16 Bit"
 
 #endif // SHARED_INCLUDES

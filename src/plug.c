@@ -383,8 +383,6 @@ static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
             mixedSample += wave_value / MAX_POLYPHONY;
         }
 
-        // TODO: normalize the wave
-
         *buffer++ = mixedSample; // left
         *buffer++ = mixedSample; // right
         data->current_frame++;
@@ -533,7 +531,7 @@ void plug_update(void) {
         }
 
         if (DrawButton("Export WAV", 3, screen_width - 340, 70, 160, 40)) {
-            save_notes_wave_file(state->waveform_samples, 0);
+            save_notes_wave_file(state->waveform_samples, state->waveform_samples_count);
         }
 
         if (state->sound == NULL) {
