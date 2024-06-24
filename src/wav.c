@@ -12,7 +12,7 @@
 #include "shared.h"
 #include "wav.h"
 
-void save_notes_wave_file(void* samples, int samples_count) {
+void save_notes_wave_file(void* samples, int samples_count, char *filename) {
     Wave wave = (Wave) {
         .frameCount = samples_count,
         .sampleRate = SAMPLE_RATE,
@@ -21,7 +21,7 @@ void save_notes_wave_file(void* samples, int samples_count) {
         .data = samples
     };
 
-    ExportWave(wave, "file.wav");
+    ExportWave(wave, filename);
     printf("Samples exported: %d\n", wave.frameCount);
     printf("Sample rate: %d\n", wave.sampleRate);
     printf("Channels: %d\n", wave.channels);

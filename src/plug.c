@@ -36,7 +36,7 @@ typedef struct {
     float waveform_samples[2048 * NOTES_LIMIT];
     int waveform_samples_count;
 
-    Sound *sound;
+    Music *sound;
 } State;
 
 State *state = NULL;
@@ -393,32 +393,32 @@ static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
 
 void unload_sound(void) {
     if (state->sound == NULL)  return;
-    StopSound(*state->sound);
-    UnloadSound(*state->sound);
-    free(state->sound);
+    add_breadcrumbs(); 
+
+    StopMusicStream(*state->sound);
+    UnloadMusicStream(*state->sound);
     state->sound = NULL;
 }
 
 // TODO: audio error handling
 void create_sound(void) {
     unload_sound();
-    state->sound = NULL;
-
     if (state->waveform_samples_count == 0)  return;
+    add_breadcrumbs(); 
+    printf("1111111\n");
 
-    Wave wave = (Wave) {
-        .frameCount = state->waveform_samples_count,
-        .sampleRate = SAMPLE_RATE,
-        .sampleSize = sizeof(float),
-        .channels = NUMBER_OF_CHANNELS,
-        .data = state->waveform_samples
-    };
+    char *filename = "render.wav";
+    save_notes_wave_file(state->waveform_samples, state->waveform_samples_count, filename);
+    printf("2222222\n");
 
-    state->sound = malloc(sizeof(Sound));
-    *state->sound = LoadSoundFromWave(wave);
+    *state->sound = LoadMusicStream(filename);
+
+    printf("3333333\n");
 }
 
 void create_waveform(void) {
+    add_breadcrumbs(); 
+
     SoundState data = {
         .notes = state->notes,
         .notes_count = state->notes_count,
@@ -531,19 +531,19 @@ void plug_update(void) {
         }
 
         if (DrawButton("Export WAV", 3, screen_width - 340, 70, 160, 40)) {
-            save_notes_wave_file(state->waveform_samples, state->waveform_samples_count);
+            save_notes_wave_file(state->waveform_samples, state->waveform_samples_count, "export.wav");
         }
 
         if (state->sound == NULL) {
             DrawButton("Sound Init...", 4, screen_width - 510, 20, 160, 40);
         } else {
-            if (IsSoundPlaying(*state->sound)) {
+            if (IsMusicStreamPlaying(*state->sound)) {
                 if (DrawButton("Stop", 4, screen_width - 510, 20, 160, 40)) {
-                    StopSound(*state->sound);
+                    StopMusicStream(*state->sound);
                 }
             } else {
                 if (DrawButton("Play", 4, screen_width - 510, 20, 160, 40)) {
-                    PlaySound(*state->sound);
+                    PlayMusicStream(*state->sound);
                 }
             }
         }

@@ -17,4 +17,10 @@ typedef struct {
 #define NUMBER_OF_CHANNELS  2
 #define SAMPLE_RATE         (44100)
 
+#if 1
+#define add_breadcrumbs() printf("- %s: %s:%d\n", __func__, __FILE__, __LINE__);
+#else
+#define add_breadcrumbs() 
+#endif
+
 #endif // SHARED_INCLUDES
