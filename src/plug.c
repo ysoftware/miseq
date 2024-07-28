@@ -17,6 +17,7 @@
 // TODO: generate wave in a background thread
 // TODO: add undo for breaking actions: notes delete, generation
 // TODO: switch to Raylib MusicStream and add playback tracking
+// TODO: proper waveform drawing
 
 #define NOTES_LIMIT 10000
 
