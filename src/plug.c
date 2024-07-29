@@ -405,21 +405,11 @@ void unload_sound(void) {
 void create_sound(void) {
     unload_sound();
     if (state->waveform_samples_count == 0)  return;
-    add_breadcrumbs(); 
-    printf("1111111\n");
 
-    char *filename = "render.wav";
-    save_notes_wave_file(state->waveform_samples, state->waveform_samples_count, filename);
-    printf("2222222\n");
 
-    *state->sound = LoadMusicStream(filename);
-
-    printf("3333333\n");
 }
 
 void create_waveform(void) {
-    add_breadcrumbs(); 
-
     SoundState data = {
         .notes = state->notes,
         .notes_count = state->notes_count,
