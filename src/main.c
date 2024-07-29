@@ -15,6 +15,7 @@ void* (*plug_pre_reload)(void);
 void (*plug_post_reload)(void*);
 
 char *library_path = "./build/libplug.so";
+char *library_lockfile_path = "./build/libplug.lock";
 time_t last_library_load_time = 0;
 
 bool load_library(void) {
@@ -37,7 +38,7 @@ bool load_library(void) {
     return true; 
 
 fail:
-    printf("Error: %s\n", dlerror());
+    printf("main.c: load_library: Error: %s\n", dlerror());
     if (plugin_handle) dlclose(plugin_handle);
     return false;
 }
@@ -47,18 +48,15 @@ bool load_library_if_modified(void) {
     stat(library_path, &attributes);
     time_t modified_time = attributes.st_mtime;
 
-    time_t now = time(NULL);
-    
-    // TODO: make it not depend on time, but rather waiting until the library is ready to be loaded 
-    // (finished writing to the file)
-    bool file_was_modified = modified_time > last_library_load_time && modified_time + 0.5 < now;
+    // check if existing file is newer than last loaded version
+    if (modified_time <= last_library_load_time)  return false;
 
-    if (file_was_modified) {
-        load_library();
-        return true;
-    }
+    // check if lock file exists
+    if (access(library_lockfile_path, F_OK) == 0)  return false;
 
-    return false;
+    load_library();
+
+    return true;
 }
 
 int main(void) {

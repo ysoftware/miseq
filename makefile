@@ -35,8 +35,10 @@ build/ui.o: src/ui.c
 	$(compiler) $(warnings) $(raylib) -fPIC -c src/ui.c -o build/ui.o 
 
 build/libplug.so: build build/midi.o build/wav.o build/ui.o src/plug.c
+	touch build/libplug.lock
 	$(compiler) $(warnings) $(raylib) -fPIC -c src/plug.c -o build/plug.o
 	$(compiler) $(warnings) $(raylib) $(frameworks) -shared -o build/libplug.so build/plug.o build/ui.o build/wav.o build/midi.o
+	rm build/libplug.lock
 
 miseq.app: src/main.c
 	$(compiler) $(warnings) $(raylib) $(frameworks) -o miseq.app src/main.c
