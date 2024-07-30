@@ -210,7 +210,8 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
     if (state->waveform_samples_count == 0)  return;
 
-    Console("Samples count %d", state->waveform_samples_count);
+    int draw_calls_count = 0;
+    Console("Samples count    %d", state->waveform_samples_count);
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
         state->waveform_scroll_zoom_state.target_zoom_x = 0.5f;
@@ -224,6 +225,13 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     float content_size = sample_width * state->waveform_samples_count;
     assert(content_size > 0);
 
+    float line_thickness = sample_width * 2;
+    Console("Sample width %f", sample_width);
+
+    if (sample_width < 0.45) {
+
+    }
+
     float scroll_offset = 0;
     process_scroll_interaction(
         &state->waveform_scroll_zoom_state, 
@@ -233,23 +241,51 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     );
 
     Rectangle background_rect = calculate_content_rect(view_x, view_width, view_y, view_height, content_size, scroll_offset);
+    draw_calls_count += 1;
     DrawRectangleRec(background_rect, GRAY);
 
-    // draw section separators every 1 sec
-    int samples_per_section = SAMPLE_RATE;
+    float previous_value = 0;
 
     for (int i = 0; i < state->waveform_samples_count; i++) {
         float value = state->waveform_samples[i * 2];
 
-        float posX = i * sample_width - scroll_offset;
-        float posY = view_height - (view_height/2 - (-1.0f * value * wave_amplitude));
-        Rectangle sample_rect = { view_x + posX, view_y + posY, 2, view_height / 50 };
-        Rectangle sample_clipped_rect = GetCollisionRec(background_rect, sample_rect);
-
-        if (sample_clipped_rect.width > 0) {
-            DrawRectangleRec(sample_rect, BLACK);
+        if (i == 0) {
+            previous_value = value;
+            continue;
         }
 
+        // draw line
+        float x0 = (i - 1) * sample_width - scroll_offset + view_x;
+        float x1 = i * sample_width - scroll_offset + view_x;
+        float y0 = view_height - (view_height/2 - (-1.0f * previous_value * wave_amplitude)) + view_y;
+        float y1 = view_height - (view_height/2 - (-1.0f * value * wave_amplitude)) + view_y;
+
+        previous_value = value;
+
+        float left_edge = view_x;
+        float right_edge = background_rect.x + background_rect.width;
+        float top_edge = view_y;
+        float bottom_edge = background_rect.y + background_rect.height;
+
+        // check if not beyond the bounds
+        if (x1 > right_edge || x0 < left_edge)  continue;
+        if ((y0 < top_edge && y1 < top_edge) || (y0 > bottom_edge && y1 > bottom_edge))  continue;
+
+        Vector2 point1 = (Vector2) { 
+            fmax(left_edge, x0),
+            fmin(bottom_edge, fmax(top_edge, y0))
+        };
+
+        Vector2 point2 = (Vector2) { 
+            fmin(right_edge, x1),
+            fmax(top_edge, fmin(bottom_edge, y1))
+        };
+
+        draw_calls_count += 1;
+        DrawLineEx(point1, point2, line_thickness, BLACK);
+
+        // vertical line separator every second
+        int samples_per_section = SAMPLE_RATE;
         if (i % samples_per_section == 0 && i > 0) {
             Rectangle separator_rect = {
                 view_x - scroll_offset + (i * sample_width),
@@ -257,9 +293,13 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
                 3,
                 view_height
             };
+
+            draw_calls_count += 1;
             DrawRectangleRec(separator_rect, DARKGRAY);
         }
     }
+
+    Console("Draw calls count %d", draw_calls_count);
 
     if (DrawButton("MIDI", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
         state->is_displaying_waveform = false;

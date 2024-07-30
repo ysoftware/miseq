@@ -63,6 +63,7 @@ int main(void) {
     if (!load_library()) return 1;
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
 
     InitAudioDevice();
     InitWindow(1200, 800, "miseq");
