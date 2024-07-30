@@ -44,6 +44,10 @@ State *state = NULL;
 
 // functions
 
+float lerp(float a, float b, float f) {
+    return a + f * (b - a);
+}
+
 double random_value(void) {
     double value = (double)GetRandomValue(0, 100000) / 100000;
     return value;
@@ -110,7 +114,11 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         &scroll_offset
     );
 
-    Rectangle background_rect = calculate_content_rect(view_x, view_width, view_y, view_height, content_size, scroll_offset);
+    Rectangle background_rect = calculate_content_rect(
+        view_x, view_width, 
+        view_y, view_height, 
+        content_size, scroll_offset
+    );
     DrawRectangleRec(background_rect, GRAY);
 
     // selection state
@@ -225,12 +233,35 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     float content_size = sample_width * state->waveform_samples_count;
     assert(content_size > 0);
 
-    float line_thickness = sample_width * 2;
-    Console("Sample width %f", sample_width);
+    float line_thickness = 3;
+    int skipping_frames = 1;
 
-    if (sample_width < 0.45) {
-
+    // dumb hardcoded settings for each group
+    if (sample_width > 0.4) {
+        line_thickness = 3;
+        skipping_frames = 1;
+    } else if (sample_width > 0.25) {
+        line_thickness = 2.5;
+        skipping_frames = 2;
+    } else if (sample_width > 0.11) {
+        line_thickness = 2;
+        skipping_frames = 3;
+    } else if (sample_width > 0.075) {
+        line_thickness = 1.5;
+        skipping_frames = 4;
+    } else if (sample_width > 0.03) {
+        line_thickness = 1;
+        skipping_frames = 8;
+    } else if (sample_width > 0.025) {
+        line_thickness = 1;
+        skipping_frames = 16;
+    } else {
+        line_thickness = 0.5;
+        skipping_frames = 32;
     }
+
+
+    Console("Sample width %f", sample_width);
 
     float scroll_offset = 0;
     process_scroll_interaction(
@@ -240,19 +271,25 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         &scroll_offset
     );
 
-    Rectangle background_rect = calculate_content_rect(view_x, view_width, view_y, view_height, content_size, scroll_offset);
-    draw_calls_count += 1;
+    Rectangle background_rect = calculate_content_rect(
+        view_x, view_width, 
+        view_y, view_height, 
+        content_size, scroll_offset
+    );
     DrawRectangleRec(background_rect, GRAY);
+    draw_calls_count += 1;
 
     float previous_value = 0;
 
     for (int i = 0; i < state->waveform_samples_count; i++) {
         float value = state->waveform_samples[i * 2];
 
-        if (i == 0) {
+        if (i == 0) { // nothing to draw since there is only 1 point yet
             previous_value = value;
             continue;
         }
+
+        if (i % skipping_frames != 0)  continue;
 
         // draw line
         float x0 = (i - 1) * sample_width - scroll_offset + view_x;
@@ -281,8 +318,8 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
             fmax(top_edge, fmin(bottom_edge, y1))
         };
 
-        draw_calls_count += 1;
         DrawLineEx(point1, point2, line_thickness, BLACK);
+        draw_calls_count += 1;
 
         // vertical line separator every second
         int samples_per_section = SAMPLE_RATE;
@@ -294,11 +331,13 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
                 view_height
             };
 
-            draw_calls_count += 1;
             DrawRectangleRec(separator_rect, DARKGRAY);
+            draw_calls_count += 1;
         }
     }
 
+    Console("Line thickness %f", line_thickness);
+    Console("Skipping frames %d", skipping_frames);
     Console("Draw calls count %d", draw_calls_count);
 
     if (DrawButton("MIDI", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
