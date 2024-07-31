@@ -6,5 +6,5 @@ portaudio_x64.dll
 /build
 miseq.app.dSYM
 1.mid
-miseq.xcodeproj/project.xcworkspace/*
-miseq.xcodeproj/xcuserdata/iaroslav.erokhin.xcuserdatad/xcschemes/*
+xcode_miseq.xcodeproj/project.xcworkspace/*
+xcode_miseq.xcodeproj/xcuserdata/iaroslav.erokhin.xcuserdatad/xcschemes/*
