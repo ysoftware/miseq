@@ -29,7 +29,7 @@ build/midi.o: src/midi.c
 	$(compiler) $(warnings) -fPIC -c src/midi.c -o build/midi.o
 
 build/wav.o: src/wav.c
-	$(compiler) $(warnings) -fPIC -c src/wav.c -o build/wav.o
+	$(compiler) $(warnings) $(raylib) -fPIC -c src/wav.c -o build/wav.o
 
 build/ui.o: src/ui.c
 	$(compiler) $(warnings) $(raylib) -fPIC -c src/ui.c -o build/ui.o 
