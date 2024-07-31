@@ -44,6 +44,11 @@ State *state = NULL;
 
 // functions
 
+float inverse_lerp(float a, float b, float f) {
+    if (a == b)  return 0;
+    return (f - a) / (b - a);
+}
+
 float lerp(float a, float b, float f) {
     return a + f * (b - a);
 }
@@ -218,7 +223,6 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
     if (state->waveform_samples_count == 0)  return;
 
-    int draw_calls_count = 0;
     Console("Samples count    %d", state->waveform_samples_count);
 
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
@@ -237,35 +241,26 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
     float scroll_offset = 0;
     process_scroll_interaction(
-            &state->waveform_scroll_zoom_state, 
-            content_size, 
-            view_width,
-            &scroll_offset
-            );
+        &state->waveform_scroll_zoom_state, 
+        content_size, 
+        view_width,
+        &scroll_offset
+    );
 
     Rectangle background_rect = calculate_content_rect(
-            view_x, view_width, 
-            view_y, view_height, 
-            content_size, scroll_offset
-            );
+        view_x, view_width, 
+        view_y, view_height, 
+        content_size, scroll_offset
+    );
     DrawRectangleRec(background_rect, GRAY);
-    draw_calls_count += 1;
 
-    if (sample_width > 0.2) { // draw actual wave (zoomed in)
-        float line_thickness = 1.8;
-        int skipping_frames = 3;
+    int draw_calls_count = 0;
 
-        // dumb hardcoded settings for each zoom level
-        if (sample_width > 0.65) {
-            line_thickness = 3;
-            skipping_frames = 1;
-        } else if (sample_width > 0.35) {
-            line_thickness = 2.5;
-            skipping_frames = 2;
-        } else if (sample_width > 0.20) {
-            line_thickness = 1.8;
-            skipping_frames = 3;
-        }
+    if (sample_width > 0.3) { // draw actual wave (zoomed in)
+
+        float sample_width_percent = inverse_lerp(0.3, 1, sample_width);
+        float line_thickness = lerp(2.0, 3.5, sample_width_percent);
+        int skipping_frames = (int) lerp(3, 1, sample_width_percent);
 
         Console("Line thickness %f", line_thickness);
         Console("Skipping frames %d", skipping_frames);
@@ -298,12 +293,12 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
             if (x1 > right_edge || x0 < left_edge)  continue;
             if ((y0 < top_edge && y1 < top_edge) || (y0 > bottom_edge && y1 > bottom_edge))  continue;
 
-            Vector2 point1 = (Vector2) { 
+            Vector2 point1 = (Vector2) {
                 fmax(left_edge, x0),
                 fmin(bottom_edge, fmax(top_edge, y0))
             };
 
-            Vector2 point2 = (Vector2) { 
+            Vector2 point2 = (Vector2) {
                 fmin(right_edge, x1),
                 fmax(top_edge, fmin(bottom_edge, y1))
             };
@@ -312,7 +307,44 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
             draw_calls_count += 1;
         }
     } else { // draw zoomed out
+        float sample_width_percent = inverse_lerp(0.01, 0.3, sample_width);
+        float skipping_frames_value = lerp(400, 20, sample_width_percent);
+        int skipping_frames = (int) skipping_frames_value;
 
+        float highest_value = 0;
+        float sum = 0;
+        for (int i = 0; i < state->waveform_samples_count; i++) {
+            float value = state->waveform_samples[i * 2];
+
+            if (fabs(value) > highest_value) {
+                highest_value = fabs(value);
+            }
+
+            sum += value * value;
+
+            if (i % skipping_frames != 0)  continue;
+            int j = i / skipping_frames;
+
+            float x = (j * skipping_frames - 1) * sample_width - scroll_offset + view_x;
+            float width = sample_width * skipping_frames;
+
+            float height_peak = highest_value * 2 * wave_amplitude;
+            float y_peak = view_y + view_height / 2 - height_peak / 2;
+            DrawRectangleRec((Rectangle) { x, y_peak, width, height_peak }, BLACK);
+            draw_calls_count += 1;
+
+            float rms_value = sqrt(sum / skipping_frames);
+            float height_rms = rms_value * 2 * wave_amplitude;
+            float y_rms = view_y + view_height / 2 - height_rms / 2;
+            DrawRectangleRec((Rectangle) { x, y_rms, width, height_rms }, BLUE);
+            draw_calls_count += 1;
+
+            highest_value = 0;
+            sum = 0;
+        }
+
+        Console("sample_width %f%%", sample_width_percent);
+        Console("Skipping frames %d", skipping_frames);
     }
 
     // vertical line separator every second (excluding 0)
@@ -325,7 +357,6 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         };
 
         DrawRectangleRec(separator_rect, DARKGRAY);
-        draw_calls_count += 1;
     }
 
     Console("Draw calls count %d", draw_calls_count);
@@ -474,8 +505,6 @@ void unload_sound(void) {
 void create_sound(void) {
     unload_sound();
     if (state->waveform_samples_count == 0)  return;
-
-
 }
 
 void create_waveform(void) {
@@ -560,6 +589,8 @@ void plug_update(void) {
     BeginDrawing();
         ClearBackground(DARKGRAY);
         ClearConsole();
+
+        Console("FPS: %d", GetFPS());
 
         const int notes_panel_top_offset = 200;
         if (!state->is_displaying_waveform) {
