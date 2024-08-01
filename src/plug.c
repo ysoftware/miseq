@@ -223,8 +223,6 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 void DrawWaveform(float view_x, float view_y, float view_width, float view_height) {
     if (state->waveform_samples_count == 0)  return;
 
-    Console("Samples count    %d", state->waveform_samples_count);
-
     if (IsMouseButtonPressed(MOUSE_BUTTON_MIDDLE)) {
         state->waveform_scroll_zoom_state.target_zoom_x = 0.5f;
         state->waveform_scroll_zoom_state.target_zoom_y = 0.5f;
@@ -236,8 +234,6 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     float wave_amplitude = 100 + state->waveform_scroll_zoom_state.zoom_y * (view_height * 3 - 100);
     float content_size = sample_width * state->waveform_samples_count;
     assert(content_size > 0);
-
-    Console("Sample width %f", sample_width);
 
     float scroll_offset = 0;
     process_scroll_interaction(
@@ -257,14 +253,15 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     int draw_calls_count = 0;
     const float min_sample_width_for_precise_wave = 0.1515;
 
-    if (sample_width > min_sample_width_for_precise_wave) { // draw actual wave (zoomed in)
+    float right_edge = background_rect.x + background_rect.width;
+    float bottom_edge = background_rect.y + background_rect.height;
 
+    // TODO: can be optimized better by skipping values that can't be on the screen instead of checking all of them
+
+    if (sample_width > min_sample_width_for_precise_wave) { // draw actual wave (zoomed in)
         float sample_width_percent = inverse_lerp(min_sample_width_for_precise_wave, 1, sample_width);
         float line_thickness = lerp(2.0, 3.5, sample_width_percent);
         int skipping_frames = (int) lerp(3, 1, sample_width_percent);
-
-        Console("Line thickness %f", line_thickness);
-        Console("Skipping frames %d", skipping_frames);
 
         float previous_value = 0;
         for (int i = 0; i < state->waveform_samples_count; i++) {
@@ -285,23 +282,18 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
             previous_value = value;
 
-            float left_edge = view_x;
-            float right_edge = background_rect.x + background_rect.width;
-            float top_edge = view_y;
-            float bottom_edge = background_rect.y + background_rect.height;
-
             // check if not beyond the bounds
-            if (x1 > right_edge || x0 < left_edge)  continue;
-            if ((y0 < top_edge && y1 < top_edge) || (y0 > bottom_edge && y1 > bottom_edge))  continue;
+            if (x1 > right_edge || x0 < view_x)  continue;
+            if ((y0 < view_y && y1 < view_y) || (y0 > bottom_edge && y1 > bottom_edge))  continue;
 
             Vector2 point1 = (Vector2) {
-                fmax(left_edge, x0),
-                fmin(bottom_edge, fmax(top_edge, y0))
+                fmax(view_x, x0),
+                fmin(bottom_edge, fmax(view_y, y0))
             };
 
             Vector2 point2 = (Vector2) {
                 fmin(right_edge, x1),
-                fmax(top_edge, fmin(bottom_edge, y1))
+                fmax(view_y, fmin(bottom_edge, y1))
             };
 
             DrawLineEx(point1, point2, line_thickness, BLACK);
@@ -313,42 +305,57 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         float skipping_frames_value = expected_sample_width / sample_width;
         int skipping_frames = (int) skipping_frames_value;
 
+        /* bool did_print_once = false; */
+
         float highest_value = 0;
         float sum = 0;
         for (int i = 0; i < state->waveform_samples_count; i++) {
             float value = state->waveform_samples[i * 2];
 
-            if (fabs(value) > highest_value) {
-                highest_value = fabs(value);
-            }
-
+            // collect values in this batch
             sum += value * value;
-
+            highest_value = fmax(highest_value, fabs(value));
             if (i % skipping_frames != 0)  continue;
-            int j = i / skipping_frames;
 
+            int j = i / skipping_frames;
             float x = (j * skipping_frames - 1) * sample_width - scroll_offset + view_x;
             float width = sample_width * skipping_frames;
 
             float height_peak = highest_value * 2 * wave_amplitude;
             float y_peak = view_y + view_height / 2 - height_peak / 2;
-            DrawRectangleRec((Rectangle) { x, y_peak, width, height_peak }, BLACK);
-            draw_calls_count += 1;
 
-            if (sample_width < min_sample_width_for_precise_wave / 3 * 2) {
-                float rms_value = sqrt(sum / skipping_frames) * 0.8;
-                float height_rms = rms_value * 2 * wave_amplitude;
-                float y_rms = view_y + view_height / 2 - height_rms / 2;
-                DrawRectangleRec((Rectangle) { x, y_rms, width, height_rms }, DARKGRAY);
-                draw_calls_count += 1;
-            }
+            bool should_draw_rms = sample_width < min_sample_width_for_precise_wave / 3 * 2;
+            float rms_value = sqrt(sum / skipping_frames) * 0.8;
+            float height_rms = rms_value * 2 * wave_amplitude;
+            float y_rms = view_y + view_height / 2 - height_rms / 2;
 
+            // reset values before the next batch
             highest_value = 0;
             sum = 0;
-        }
 
-        Console("sample_width %f%%", sample_width_percent);
-        Console("Skipping frames %d", skipping_frames);
+            // check if not beyond the bounds
+            if (x > right_edge || (x + width) < view_x)  continue;
+
+            Rectangle peak_rect = (Rectangle) {
+                x,
+                fmin(bottom_edge, fmax(view_y, y_peak)),
+                width,
+                fmin(view_height, height_peak)
+            };
+            DrawRectangleRec(GetCollisionRec(background_rect, peak_rect), BLACK);
+            draw_calls_count += 1;
+
+            if (should_draw_rms) {
+                Rectangle rms_rect = (Rectangle) {
+                    x,
+                    fmin(bottom_edge, fmax(view_y, y_rms)),
+                    width,
+                    fmin(view_height, height_rms)
+                };
+                DrawRectangleRec(GetCollisionRec(background_rect, rms_rect), DARKGRAY);
+                draw_calls_count += 1;
+            }
+        }
     }
 
     // vertical line separator every second (excluding 0)
