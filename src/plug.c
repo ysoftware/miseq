@@ -255,10 +255,11 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     DrawRectangleRec(background_rect, GRAY);
 
     int draw_calls_count = 0;
+    const float min_sample_width_for_precise_wave = 0.1515;
 
-    if (sample_width > 0.3) { // draw actual wave (zoomed in)
+    if (sample_width > min_sample_width_for_precise_wave) { // draw actual wave (zoomed in)
 
-        float sample_width_percent = inverse_lerp(0.3, 1, sample_width);
+        float sample_width_percent = inverse_lerp(min_sample_width_for_precise_wave, 1, sample_width);
         float line_thickness = lerp(2.0, 3.5, sample_width_percent);
         int skipping_frames = (int) lerp(3, 1, sample_width_percent);
 
@@ -307,8 +308,9 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
             draw_calls_count += 1;
         }
     } else { // draw zoomed out
-        float sample_width_percent = inverse_lerp(0.01, 0.3, sample_width);
-        float skipping_frames_value = lerp(400, 20, sample_width_percent);
+        float sample_width_percent = inverse_lerp(0.01, min_sample_width_for_precise_wave, sample_width);
+        float expected_sample_width = lerp(4, 2, sample_width_percent);
+        float skipping_frames_value = expected_sample_width / sample_width;
         int skipping_frames = (int) skipping_frames_value;
 
         float highest_value = 0;
@@ -333,11 +335,13 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
             DrawRectangleRec((Rectangle) { x, y_peak, width, height_peak }, BLACK);
             draw_calls_count += 1;
 
-            float rms_value = sqrt(sum / skipping_frames);
-            float height_rms = rms_value * 2 * wave_amplitude;
-            float y_rms = view_y + view_height / 2 - height_rms / 2;
-            DrawRectangleRec((Rectangle) { x, y_rms, width, height_rms }, BLUE);
-            draw_calls_count += 1;
+            if (sample_width < min_sample_width_for_precise_wave / 3 * 2) {
+                float rms_value = sqrt(sum / skipping_frames) * 0.8;
+                float height_rms = rms_value * 2 * wave_amplitude;
+                float y_rms = view_y + view_height / 2 - height_rms / 2;
+                DrawRectangleRec((Rectangle) { x, y_rms, width, height_rms }, DARKGRAY);
+                draw_calls_count += 1;
+            }
 
             highest_value = 0;
             sum = 0;
