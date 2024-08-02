@@ -70,7 +70,7 @@ void create_notes(void) {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 10; i++) {
+    for (double i = 0; i < 15; i++) {
         double wave1 = cos(i / wave1_random) * 60 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 10 * random_value();
@@ -303,8 +303,6 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         float skipping_frames_value = expected_sample_width / sample_width;
         int skipping_frames = (int) skipping_frames_value;
 
-        /* bool did_print_once = false; */
-
         float highest_value = 0;
         float sum = 0;
         for (int i = 0; i < state->waveform_samples_count; i++) {
@@ -366,9 +364,32 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         };
 
         DrawRectangleRec(separator_rect, DARKGRAY);
+        draw_calls_count += 1;
     }
 
     Console("Draw calls count %d", draw_calls_count);
+
+    if (state->is_playing_sound) {
+        float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
+        Rectangle playback_rect = {
+            content_size * playback_progress - scroll_offset,
+            view_y,
+            3,
+            view_height
+        };
+
+        DrawRectangleRec(playback_rect, RED);
+        draw_calls_count += 1;
+
+        int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000) % 1000;
+        int seconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / SAMPLE_RATE;
+        int minutes = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE * 60);
+
+        char time_text[20];
+        sprintf(time_text, "%02d:%02d:%03d", minutes, seconds, milliseconds);
+        DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
+        draw_calls_count += 1;
+    }
 
     if (DrawButton("MIDI", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
         state->is_displaying_waveform = false;
@@ -511,10 +532,12 @@ void create_waveform_samples(void) {
     int current_frame;
     int frames_per_tick = SAMPLE_RATE / 100;
 
+    float silence_trail = 0;
+
     for (current_frame = 0; current_frame < 10000; current_frame++) {
         bool success = create_samples_from_notes(
             &state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
-            &data, 
+            &data,
             FRAMES_PER_BUFFER,
             frames_per_tick
         );
@@ -524,9 +547,12 @@ void create_waveform_samples(void) {
             return;
         }
 
-        bool did_produce_silence = state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0;
+        if (state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0) {
+            silence_trail += 1;
+        }
+
         uint32_t current_tick = data.current_frame / frames_per_tick;
-        if (current_tick > end_tick && did_produce_silence)  break;
+        if (current_tick > end_tick && silence_trail == 10)  break;
     }
 
     state->waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
@@ -539,10 +565,31 @@ void audio_callback(ma_device *device, void *output, const void *input, ma_uint3
     if (!state->is_playing_sound)  return;
     if (state->waveform_samples_count == 0)  return;
 
+    int available_samples = state->waveform_samples_count - state->playback_sample_counter;
+    int samples_to_copy_count = available_samples;
+    int desired_samples_count = frame_count * NUMBER_OF_CHANNELS;
+
+    if (samples_to_copy_count < desired_samples_count) { // not enough samples: copy them and fill the rest with zeroes
+        int leftover_samples_count = desired_samples_count - samples_to_copy_count;
+        
+        float *samples_end_position = &((float*)output)[samples_to_copy_count];
+        memset((void*)samples_end_position, 0, sizeof(float) * leftover_samples_count);
+
+/*         printf("Desired samples: %d\n", desired_samples_count); */
+/*         printf("Filled %d samples with 0s\n", leftover_samples_count); */
+/*         printf("Before that: \n"); */
+
+/*         for (int i = 0; i < 10000; i++) { */
+/*             printf(" %f\n", samples_end_position[-i]); */
+/*         } */
+
+    } else { // enough samples: ok
+        samples_to_copy_count = desired_samples_count;
+    }
+
     void *sample_position = &state->waveform_samples[state->playback_sample_counter];
-    int samples_to_copy = fmin(frame_count * 2, state->waveform_samples_count - state->playback_sample_counter);
-    memcpy(output, sample_position, sizeof(float) * samples_to_copy);
-    state->playback_sample_counter += samples_to_copy;
+    memcpy(output, sample_position, sizeof(float) * samples_to_copy_count);
+    state->playback_sample_counter += samples_to_copy_count;
 }
 
 void init_audio_device() {
@@ -595,6 +642,7 @@ void plug_cleanup(void) {
 }
 
 void *plug_pre_reload(void) {
+    state->is_playing_sound = false;
     return state;
 }
 
@@ -669,4 +717,4 @@ void plug_update(void) {
 
 // TODO: add undo for breaking actions: notes delete, generation
 // TODO: export .wav in wav.h
-
+// TODO: get audio callback from new state after hot reloading

@@ -74,8 +74,8 @@ int main(void) {
     plug_init();
 
     while(!WindowShouldClose()) {
-        void *state = plug_pre_reload();
         if (load_library_if_modified()) {
+            void *state = plug_pre_reload();
             printf("Hotreloading successful\n");
             plug_post_reload(state);
         }
