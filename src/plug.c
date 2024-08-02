@@ -570,19 +570,10 @@ void audio_callback(ma_device *device, void *output, const void *input, ma_uint3
     int desired_samples_count = frame_count * NUMBER_OF_CHANNELS;
 
     if (samples_to_copy_count < desired_samples_count) { // not enough samples: copy them and fill the rest with zeroes
-        int leftover_samples_count = desired_samples_count - samples_to_copy_count;
-        
-        float *samples_end_position = &((float*)output)[samples_to_copy_count];
-        memset((void*)samples_end_position, 0, sizeof(float) * leftover_samples_count);
-
-/*         printf("Desired samples: %d\n", desired_samples_count); */
-/*         printf("Filled %d samples with 0s\n", leftover_samples_count); */
-/*         printf("Before that: \n"); */
-
-/*         for (int i = 0; i < 10000; i++) { */
-/*             printf(" %f\n", samples_end_position[-i]); */
-/*         } */
-
+        // TODO: audio is chopped at the end, maybe we can solve this?
+        /* int leftover_samples_count = desired_samples_count - samples_to_copy_count; */
+        /* float *samples_end_position = &((float*)output)[samples_to_copy_count]; */
+        /* memset((void*)samples_end_position, 0, sizeof(float) * leftover_samples_count); */
     } else { // enough samples: ok
         samples_to_copy_count = desired_samples_count;
     }
