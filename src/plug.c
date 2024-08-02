@@ -1,5 +1,6 @@
 #include "raylib.h"
 #include "raymath.h"
+#include "miniaudio.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -14,15 +15,10 @@
 #include "wav.h"
 #include "ui.h"
 
-// TODO: generate wave in a background thread
-// TODO: add undo for breaking actions: notes delete, generation
-// TODO: switch to Raylib MusicStream and add playback tracking
-// TODO: proper waveform drawing
-
 #define NOTES_LIMIT 10000
 
 // predeclarations
-void create_waveform(void);
+void create_waveform_samples(void);
 void create_sound(void);
 
 typedef struct {
@@ -36,8 +32,10 @@ typedef struct {
     int notes_count;
     float waveform_samples[2048 * NOTES_LIMIT];
     int waveform_samples_count;
-
-    Music *sound;
+    
+    ma_device audio_device;
+    int playback_sample_counter;
+    bool is_playing_sound;
 } State;
 
 State *state = NULL;
@@ -211,7 +209,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     }
 
     if (did_edit_notes) {
-        create_waveform();
+        create_waveform_samples();
         create_sound();
     }
 
@@ -398,8 +396,6 @@ typedef struct {
     } active_notes[MAX_POLYPHONY];
 } SoundState;
 
-// TODO: export .wav in wav.h
-
 static int note_identifier(Note note) {
     return 1000000000 + note.start_tick * 1000 + note.key;
 }
@@ -503,22 +499,7 @@ static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
     return true;
 }
 
-void unload_sound(void) {
-    if (state->sound == NULL)  return;
-    add_breadcrumbs(); 
-
-    StopMusicStream(*state->sound);
-    UnloadMusicStream(*state->sound);
-    state->sound = NULL;
-}
-
-// TODO: audio error handling
-void create_sound(void) {
-    unload_sound();
-    if (state->waveform_samples_count == 0)  return;
-}
-
-void create_waveform(void) {
+void create_waveform_samples(void) {
     SoundState data = {
         .notes = state->notes,
         .notes_count = state->notes_count,
@@ -551,16 +532,46 @@ void create_waveform(void) {
     state->waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
 }
 
+void audio_callback(ma_device *device, void *output, const void *input, ma_uint32 frame_count) {
+    (void)device;
+    (void)input;
+
+    if (!state->is_playing_sound)  return;
+    if (state->waveform_samples_count == 0)  return;
+
+    void *sample_position = &state->waveform_samples[state->playback_sample_counter];
+    int samples_to_copy = fmin(frame_count * 2, state->waveform_samples_count - state->playback_sample_counter);
+    memcpy(output, sample_position, sizeof(float) * samples_to_copy);
+    state->playback_sample_counter += samples_to_copy;
+}
+
+void init_audio_device() {
+    ma_device_config config = ma_device_config_init(ma_device_type_playback);
+    config.playback.format = ma_format_f32;
+    config.playback.channels = NUMBER_OF_CHANNELS;
+    config.sampleRate = SAMPLE_RATE;
+    config.dataCallback = audio_callback;
+
+    if (ma_device_init(NULL, &config, &state->audio_device) != MA_SUCCESS) {
+        printf("Error initializing audio device.\n");
+        return;
+    }
+
+    ma_device_start(&state->audio_device);
+    printf("Audio device initialized and started.\n");
+}
+
 // plugin life cycle
 
 void plug_init(void) {
     state = malloc(sizeof(*state));
     assert(state != NULL && "Buy more RAM lol");
     memset(state, 0, sizeof(*state));
+
+    init_audio_device();
     
     create_notes();
-    create_waveform();
-    create_sound();
+    create_waveform_samples();
     
     state->waveform_scroll_zoom_state = (ScrollZoom) {
         .zoom_x = 0.5f,
@@ -578,8 +589,7 @@ void plug_init(void) {
 }
 
 void plug_cleanup(void) {
-    unload_sound();
-    CloseAudioDevice();
+    ma_device_uninit(&state->audio_device);
     free(state);
     state = NULL;
 }
@@ -596,6 +606,10 @@ void plug_update(void) {
     assert(state != NULL && "Plugin state is not initialized.");
     int screen_width = GetScreenWidth();
     int screen_height = GetScreenHeight();
+
+    if (state->waveform_samples_count == state->playback_sample_counter) {
+        state->is_playing_sound = false;
+    }
 
     BeginDrawing();
         ClearBackground(DARKGRAY);
@@ -622,10 +636,8 @@ void plug_update(void) {
         }
 
         if (DrawButton("Generate", 1, screen_width - 170, 20, 160, 40)) {
-            unload_sound();
             create_notes();
-            create_waveform();
-            create_sound();
+            create_waveform_samples();
         }
 
         if (DrawButton("Export MIDI", 2, screen_width - 340, 20, 160, 40)) {
@@ -636,23 +648,25 @@ void plug_update(void) {
             save_notes_wave_file(state->waveform_samples, state->waveform_samples_count, "export.wav");
         }
 
-        if (state->sound == NULL) {
-            DrawButton("Sound Init...", 4, screen_width - 510, 20, 160, 40);
+        if (state->is_playing_sound) {
+            if (DrawButton("Stop", 4, screen_width - 510, 20, 160, 40)) {
+                state->playback_sample_counter = 0;
+                state->is_playing_sound = false;
+            }
         } else {
-            if (IsMusicStreamPlaying(*state->sound)) {
-                if (DrawButton("Stop", 4, screen_width - 510, 20, 160, 40)) {
-                    StopMusicStream(*state->sound);
-                }
-            } else {
-                if (DrawButton("Play", 4, screen_width - 510, 20, 160, 40)) {
-                    PlayMusicStream(*state->sound);
-                }
+            if (DrawButton("Play", 4, screen_width - 510, 20, 160, 40)) {
+                state->playback_sample_counter = 0;
+                state->is_playing_sound = true;
             }
         }
-    
+
         if (state->error_message != NULL) {
             DrawConsoleLine(state->error_message);
         }
 
     EndDrawing();
 }
+
+// TODO: add undo for breaking actions: notes delete, generation
+// TODO: export .wav in wav.h
+

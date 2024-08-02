@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include <time.h>
 
+#define MINIAUDIO_IMPLEMENTATION
+#include "miniaudio.h"
+
 void *plugin_handle;
 void (*plug_init)(void);
 void (*plug_update)(void);
@@ -65,7 +68,6 @@ int main(void) {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     SetConfigFlags(FLAG_MSAA_4X_HINT);
 
-    InitAudioDevice();
     InitWindow(1200, 800, "miseq");
     SetTargetFPS(120);
 
