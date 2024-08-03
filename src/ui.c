@@ -159,7 +159,7 @@ bool DrawButton(char* title, int id, int x, int y, int width, int height) {
 
 void DrawConsoleLine(char* string) {
     int console_width = GetScreenWidth() / 2;
-    int line_height = 25;
+    int font_size = 18;
     int console_top_offset = 10;
 
     if (console_lines_this_frame == 0) {
@@ -174,13 +174,13 @@ void DrawConsoleLine(char* string) {
     
     DrawRectangle(
         0,
-        console_lines_this_frame * line_height + console_top_offset,
+        console_lines_this_frame * font_size + console_top_offset,
         console_width,
-        line_height,
+        font_size,
         BLACK 
     );
 
-    DrawText(string, 10, console_lines_this_frame * line_height + console_top_offset, 25, WHITE);
+    DrawText(string, 10, console_lines_this_frame * font_size + console_top_offset, font_size, WHITE);
     console_lines_this_frame += 1;
 }
 

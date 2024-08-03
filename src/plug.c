@@ -70,7 +70,7 @@ void create_notes(void) {
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
-    for (double i = 0; i < 15; i++) {
+    for (double i = 0; i < 31; i++) {
         double wave1 = cos(i / wave1_random) * 60 * random_value();
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 10 * random_value();
@@ -91,6 +91,13 @@ void create_notes(void) {
         state->notes_count += 1;
         current_tick += note_duration;
     }
+}
+
+void get_time_string(char *text, int time_milliseconds) { // text must be char[10]
+    int milliseconds = time_milliseconds % 1000;
+    int seconds = time_milliseconds / 1000;
+    int minutes = seconds / 60;
+    sprintf(text, "%02d:%02d:%03d", minutes, seconds, milliseconds);
 }
 
 // USER INTERFACE
@@ -381,12 +388,9 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         DrawRectangleRec(playback_rect, RED);
         draw_calls_count += 1;
 
-        int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000) % 1000;
-        int seconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / SAMPLE_RATE;
-        int minutes = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE * 60);
-
-        char time_text[20];
-        sprintf(time_text, "%02d:%02d:%03d", minutes, seconds, milliseconds);
+        char time_text[10];
+        int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
+        get_time_string(time_text, milliseconds);
         DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
         draw_calls_count += 1;
     }
@@ -427,7 +431,7 @@ static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
     float attack_frames_length = SAMPLE_RATE / 25;
     float attack_decrement = 1.0f / attack_frames_length;
 
-    float release_frames_length = SAMPLE_RATE / 0.2;
+    float release_frames_length = SAMPLE_RATE / 2;
     float release_increment = 1.0f / release_frames_length;
 
     for (uint32_t buf_frame = 0; buf_frame < frames_per_buffer; buf_frame++) {
@@ -529,12 +533,12 @@ void create_waveform_samples(void) {
     };
 
     uint32_t end_tick = state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
-    int current_frame;
+    int current_frame = 0;
     int frames_per_tick = SAMPLE_RATE / 100;
 
     float silence_trail = 0;
 
-    for (current_frame = 0; current_frame < 10000; current_frame++) {
+    while (true) {
         bool success = create_samples_from_notes(
             &state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
             &data,
@@ -553,6 +557,7 @@ void create_waveform_samples(void) {
 
         uint32_t current_tick = data.current_frame / frames_per_tick;
         if (current_tick > end_tick && silence_trail == 10)  break;
+        current_frame += 1;
     }
 
     state->waveform_samples_count = current_frame * FRAMES_PER_BUFFER;
@@ -654,6 +659,12 @@ void plug_update(void) {
         ClearConsole();
 
         Console("FPS: %d", GetFPS());
+        Console("Notes count: %d", state->notes_count);
+        Console("Samples count: %d", state->waveform_samples_count);
+
+        char time[10];
+        get_time_string(time, state->waveform_samples_count / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000));
+        Console("Audio length: %s", time);
 
         const int notes_panel_top_offset = 200;
         if (!state->is_displaying_waveform) {

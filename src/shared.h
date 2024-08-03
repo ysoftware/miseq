@@ -11,7 +11,7 @@ typedef struct {
 } Note;
 
 // audio setup
-#define MAX_POLYPHONY       16
+#define MAX_POLYPHONY       32 
 #define A4_FREQUENCY        700
 #define FRAMES_PER_BUFFER   256
 #define NUMBER_OF_CHANNELS  2
