@@ -633,7 +633,6 @@ void plug_cleanup(void) {
 }
 
 void *plug_pre_reload(void) {
-    state->is_playing_sound = false;
     return state;
 }
 

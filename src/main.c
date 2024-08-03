@@ -46,7 +46,7 @@ fail:
     return false;
 }
 
-bool load_library_if_modified(void) {
+bool is_library_file_modified(void) {
     struct stat attributes;
     stat(library_path, &attributes);
     time_t modified_time = attributes.st_mtime;
@@ -56,8 +56,6 @@ bool load_library_if_modified(void) {
 
     // check if lock file exists
     if (access(library_lockfile_path, F_OK) == 0)  return false;
-
-    load_library();
 
     return true;
 }
@@ -74,8 +72,9 @@ int main(void) {
     plug_init();
 
     while(!WindowShouldClose()) {
-        if (load_library_if_modified()) {
+        if (is_library_file_modified()) {
             void *state = plug_pre_reload();
+            if (!load_library())  break;
             printf("Hotreloading successful\n");
             plug_post_reload(state);
         }
