@@ -19,7 +19,6 @@
 
 // predeclarations
 void create_waveform_samples(void);
-void create_sound(void);
 
 typedef struct {
     Vector2 selection_first_point;
@@ -217,7 +216,6 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
 
     if (did_edit_notes) {
         create_waveform_samples();
-        create_sound();
     }
 
     if (DrawButton("Waveform", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
@@ -567,8 +565,10 @@ void audio_callback(ma_device *device, void *output, const void *input, ma_uint3
     (void)device;
     (void)input;
 
-    if (!state->is_playing_sound)  return;
-    if (state->waveform_samples_count == 0)  return;
+    if (!state->is_playing_sound || state->waveform_samples_count == 0) {
+        memset(output, 0, sizeof(float) * frame_count * NUMBER_OF_CHANNELS);
+        return;
+    }
 
     int available_samples = state->waveform_samples_count - state->playback_sample_counter;
     int samples_to_copy_count = available_samples;

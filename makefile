@@ -1,14 +1,10 @@
 warnings := -Wall -Wextra -g
+miniaudio = -Ilib
 
-ifeq ($(OS), Windows_NT)
-	raylib := -Ilib/raylib-5.0_win/include -Llib/raylib-5.0_win/lib
-	compiler := gcc -std=c99
-	frameworks := -lopengl32 -lgdi32 -luser32 -lshell32 -lwinmm -lraylib
-else ifeq ($(shell uname), Linux)
+ifeq ($(shell uname), Linux)
 	raylib := -Ilib/raylib-5.0_linux_i386/include
 	compiler := clang
 	frameworks := -lGL -lm -lpthread -ldl -lrt -lX11 -lraylib
-	miniaudio = -Ilib
 else # macos
 	raylib := -Ilib/raylib-5.0_macos/include
 	compiler := clang
