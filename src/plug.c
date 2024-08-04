@@ -16,6 +16,7 @@
 #include "ui.h"
 
 #define NOTES_LIMIT 10000
+#define FRAMES_PER_TICK (SAMPLE_RATE / 100)
 
 // predeclarations
 void create_waveform_samples(void);
@@ -63,11 +64,13 @@ void create_notes() {
 
     double base_velocity = 80;
     double base_key = 80;
-    double base_note_duration = 20;
+    double base_note_duration = 100;
 
     /* double wave1_random = 20 * random_value(); */
     double wave2_random = 15 * random_value();
-    double wave3_random = 5 * random_value();
+    double wave3_random = 100 * random_value();
+
+    double delay = 15;
 
     for (double i = 0; i < 31; i++) {
         /* double wave1 = cos(i / wave1_random) * 60 * random_value(); */
@@ -79,16 +82,16 @@ void create_notes() {
         uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
     
         state->notes[state->notes_count] = (Note) {
-            key,
-            velocity,
-            current_tick,
-            current_tick + note_duration,
+            .key = key,
+            .velocity = velocity,
+            .start_tick = current_tick + delay,
+            .end_tick = delay + current_tick + note_duration,
             .is_selected = false,
             .is_deleted = false
         };
 
         state->notes_count += 1;
-        current_tick += note_duration;
+        current_tick += note_duration + delay;
     }
 }
 
@@ -188,7 +191,7 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         Rectangle note_clipped_rect = GetCollisionRec(background_rect, note_rect);
         bool is_inside_selection_rect = CheckCollisionRecs(selection_rectangle, note_rect);
 
-        Color note_color; 
+        Color note_color;
         if (is_inside_selection_rect && IsKeyDown(KEY_LEFT_CONTROL) == note.is_selected) {
             if (note.is_selected) {
                 note_color = RED;
@@ -214,22 +217,22 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
         }
     }
 
-    if (state->is_playing_sound) {
-        // TODO: add out of view bounds check
-        float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
-        Rectangle playback_rect = {
-            view_x + content_size * playback_progress - scroll_offset,
-            view_y,
-            3,
-            view_height
-        };
-        DrawRectangleRec(playback_rect, RED);
+    // TODO: add out of view bounds check
+    int playback_tick = state->playback_sample_counter / FRAMES_PER_TICK / NUMBER_OF_CHANNELS;
+    Rectangle playback_rect = {
+        view_x - scroll_offset + (playback_tick * tick_width),
+        view_y,
+        3,
+        view_height
+    };
+    DrawRectangleRec(playback_rect, RED);
 
-        char time_text[10];
-        int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
-        get_time_string(time_text, milliseconds);
-        DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
-    }
+    Console("Playback tick: %d", playback_tick);
+
+    char time_text[10];
+    int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
+    get_time_string(time_text, milliseconds);
+    DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
 
     if (did_edit_notes) {
         create_waveform_samples();
@@ -392,24 +395,22 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
     Console("Draw calls count %d", draw_calls_count);
 
-    if (state->is_playing_sound) {
-        // TODO: add out of view bounds check
-        float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
-        Rectangle playback_rect = {
-            content_size * playback_progress - scroll_offset,
-            view_y,
-            3,
-            view_height
-        };
-        DrawRectangleRec(playback_rect, RED);
-        draw_calls_count += 1;
+    // TODO: add out of view bounds check
+    float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
+    Rectangle playback_rect = {
+        content_size * playback_progress - scroll_offset,
+        view_y,
+        3,
+        view_height
+    };
+    DrawRectangleRec(playback_rect, RED);
+    draw_calls_count += 1;
 
-        char time_text[10];
-        int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
-        get_time_string(time_text, milliseconds);
-        DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
-        draw_calls_count += 1;
-    }
+    char time_text[10];
+    int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
+    get_time_string(time_text, milliseconds);
+    DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
+    draw_calls_count += 1;
 
     if (DrawButton("MIDI", 100, view_x + view_width - 20 - 160, view_y + 20, 160, 40)) {
         state->is_displaying_waveform = false;
@@ -447,7 +448,7 @@ static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
     float attack_frames_length = SAMPLE_RATE / 25;
     float attack_decrement = 1.0f / attack_frames_length;
 
-    float release_frames_length = SAMPLE_RATE / 2;
+    float release_frames_length = SAMPLE_RATE / 100;
     float release_increment = 1.0f / release_frames_length;
 
     for (uint32_t buf_frame = 0; buf_frame < frames_per_buffer; buf_frame++) {
@@ -550,7 +551,6 @@ void create_waveform_samples() {
 
     uint32_t end_tick = state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
     int current_frame = 0;
-    int frames_per_tick = SAMPLE_RATE / 100;
 
     float silence_tail = 0;
 
@@ -559,7 +559,7 @@ void create_waveform_samples() {
             &state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS],
             &data,
             FRAMES_PER_BUFFER,
-            frames_per_tick
+            FRAMES_PER_TICK
         );
 
         if (!success) {
@@ -571,7 +571,7 @@ void create_waveform_samples() {
             silence_tail += 1;
         }
 
-        uint32_t current_tick = data.current_frame / frames_per_tick;
+        uint32_t current_tick = data.current_frame / FRAMES_PER_TICK;
         if (current_tick > end_tick && silence_tail == 2000)  break;
         current_frame += 1;
     }
@@ -673,6 +673,7 @@ void plug_update() {
 
     if (state->waveform_samples_count == state->playback_sample_counter) {
         state->is_playing_sound = false;
+        state->playback_sample_counter = 0;
     }
 
     BeginDrawing();
@@ -719,15 +720,17 @@ void plug_update() {
         }
 
         if (state->is_playing_sound) {
-            if (DrawButton("Stop", 4, screen_width - 510, 20, 160, 40)) {
-                state->playback_sample_counter = 0;
+            if (DrawButton("Pause", 4, screen_width - 510, 20, 160, 40)) {
                 state->is_playing_sound = false;
             }
         } else {
             if (DrawButton("Play", 4, screen_width - 510, 20, 160, 40)) {
-                state->playback_sample_counter = 0;
                 state->is_playing_sound = true;
             }
+        }
+        if (DrawButton("Reset", 4, screen_width - 510, 70, 160, 40)) {
+            state->playback_sample_counter = 0;
+            state->is_playing_sound = false;
         }
 
         if (state->error_message != NULL) {
