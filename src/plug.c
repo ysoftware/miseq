@@ -227,8 +227,6 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
     };
     DrawRectangleRec(playback_rect, RED);
 
-    Console("Playback tick: %d", playback_tick);
-
     char time_text[10];
     int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
     get_time_string(time_text, milliseconds);
@@ -252,12 +250,13 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
         state->waveform_scroll_zoom_state.target_scroll = 0;
     }
 
-    /* // TODO: select proper value for wave_amplitude */
-    float sample_width = state->waveform_scroll_zoom_state.zoom_x * 1.0f;
+    float zoom_x_sqrt = state->waveform_scroll_zoom_state.zoom_x * state->waveform_scroll_zoom_state.zoom_x;
+    float sample_width = fmax(0.0003, fmin(1, zoom_x_sqrt * 1.5f));
     float wave_amplitude = 100 + state->waveform_scroll_zoom_state.zoom_y * (view_height * 3 - 100);
     float content_size = sample_width * state->waveform_samples_count;
     assert(content_size > 0);
 
+    Console("sample width: %f", sample_width);
     float scroll_offset = 0;
     process_scroll_interaction(
         &state->waveform_scroll_zoom_state, 
@@ -398,7 +397,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     // TODO: add out of view bounds check
     float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
     Rectangle playback_rect = {
-        content_size * playback_progress - scroll_offset,
+        view_x + content_size * playback_progress / 2 - scroll_offset,
         view_y,
         3,
         view_height
