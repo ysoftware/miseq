@@ -253,7 +253,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     float zoom_x_sqrt = state->waveform_scroll_zoom_state.zoom_x * state->waveform_scroll_zoom_state.zoom_x;
     float sample_width = fmax(0.0003, fmin(1, zoom_x_sqrt * 1.5f));
     float wave_amplitude = 100 + state->waveform_scroll_zoom_state.zoom_y * (view_height * 3 - 100);
-    float content_size = sample_width * state->waveform_samples_count;
+    float content_size = sample_width * state->waveform_samples_count / NUMBER_OF_CHANNELS;
     assert(content_size > 0);
 
     Console("sample width: %f", sample_width);
@@ -551,7 +551,7 @@ void create_waveform_samples() {
     uint32_t end_tick = state->notes[state->notes_count-1].end_tick; // NOTE: only considering notes are sorted
     int current_frame = 0;
 
-    float silence_tail = 0;
+    /* float silence_tail = 0; */
 
     while (true) {
         bool success = create_samples_from_notes(
@@ -566,12 +566,12 @@ void create_waveform_samples() {
             return;
         }
 
-        if (state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0) {
-            silence_tail += 1;
-        }
+        /* if (state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0) { */
+        /*     silence_tail += 1; */
+        /* } */
 
-        uint32_t current_tick = data.current_frame / FRAMES_PER_TICK;
-        if (current_tick > end_tick && silence_tail == 2000)  break;
+        uint32_t current_tick = data.current_frame / NUMBER_OF_CHANNELS / FRAMES_PER_TICK;
+        if (current_tick > end_tick)  break;
         current_frame += 1;
     }
 
