@@ -75,8 +75,15 @@ int main(void) {
         if (is_library_file_modified()) {
             void *state = plug_pre_reload();
             if (!load_library())  break;
-            printf("Hotreloading successful\n");
             plug_post_reload(state);
+            printf("Hotreloading successful\n");
+        }
+
+        if (IsKeyPressed(KEY_BACKSLASH)) {
+            void *state = plug_pre_reload();
+            if (!load_library())  break;
+            plug_post_reload(state);
+            printf("Hotreloading successful\n");
         }
 
         plug_update();

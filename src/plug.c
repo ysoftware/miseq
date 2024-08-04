@@ -50,31 +50,31 @@ float lerp(float a, float b, float f) {
     return a + f * (b - a);
 }
 
-double random_value(void) {
+double random_value() {
     double value = (double)GetRandomValue(0, 100000) / 100000;
     return value;
 }
 
-void create_notes(void) {
+void create_notes() {
     srand(time(0));
     state->notes_count = 0;
 
     uint32_t current_tick = 0;
 
     double base_velocity = 80;
-    double base_key = 100;
+    double base_key = 80;
     double base_note_duration = 20;
 
-    double wave1_random = 20 * random_value();
+    /* double wave1_random = 20 * random_value(); */
     double wave2_random = 15 * random_value();
     double wave3_random = 5 * random_value();
 
     for (double i = 0; i < 31; i++) {
-        double wave1 = cos(i / wave1_random) * 60 * random_value();
+        /* double wave1 = cos(i / wave1_random) * 60 * random_value(); */
         double wave2 = sin(i / wave2_random) * 40 * random_value();
         double wave3 = sin(i / wave3_random) * 10 * random_value();
 
-        uint8_t key = (uint8_t) (base_key - wave1);
+        uint8_t key = --base_key; // (uint8_t) (base_key - wave1);
         uint8_t velocity = (uint8_t) (base_velocity - wave2);
         uint8_t note_duration = (uint8_t) (base_note_duration - wave3);
     
@@ -212,6 +212,23 @@ void DrawNotes(float view_x, float view_y, float view_width, float view_height) 
             state->notes[i].is_deleted = true;
             did_edit_notes = true;
         }
+    }
+
+    if (state->is_playing_sound) {
+        // TODO: add out of view bounds check
+        float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
+        Rectangle playback_rect = {
+            view_x + content_size * playback_progress - scroll_offset,
+            view_y,
+            3,
+            view_height
+        };
+        DrawRectangleRec(playback_rect, RED);
+
+        char time_text[10];
+        int milliseconds = state->playback_sample_counter / NUMBER_OF_CHANNELS / (SAMPLE_RATE / 1000);
+        get_time_string(time_text, milliseconds);
+        DrawText(time_text, view_x + 20, view_y + 20, 20, BLACK);
     }
 
     if (did_edit_notes) {
@@ -361,6 +378,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
 
     // vertical line separator every second (excluding 0)
     for (int i = SAMPLE_RATE; i < state->waveform_samples_count; i += SAMPLE_RATE) {
+        // TODO: add out of view bounds check
         Rectangle separator_rect = {
             view_x - scroll_offset + (i * sample_width),
             view_y,
@@ -375,6 +393,7 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
     Console("Draw calls count %d", draw_calls_count);
 
     if (state->is_playing_sound) {
+        // TODO: add out of view bounds check
         float playback_progress = (float) state->playback_sample_counter / (float) state->waveform_samples_count;
         Rectangle playback_rect = {
             content_size * playback_progress - scroll_offset,
@@ -382,7 +401,6 @@ void DrawWaveform(float view_x, float view_y, float view_width, float view_heigh
             3,
             view_height
         };
-
         DrawRectangleRec(playback_rect, RED);
         draw_calls_count += 1;
 
@@ -522,7 +540,7 @@ static bool create_samples_from_notes(float *buffer, SoundState *data, uint32_t 
     return true;
 }
 
-void create_waveform_samples(void) {
+void create_waveform_samples() {
     SoundState data = {
         .notes = state->notes,
         .notes_count = state->notes_count,
@@ -534,7 +552,7 @@ void create_waveform_samples(void) {
     int current_frame = 0;
     int frames_per_tick = SAMPLE_RATE / 100;
 
-    float silence_trail = 0;
+    float silence_tail = 0;
 
     while (true) {
         bool success = create_samples_from_notes(
@@ -550,11 +568,11 @@ void create_waveform_samples(void) {
         }
 
         if (state->waveform_samples[FRAMES_PER_BUFFER * current_frame * NUMBER_OF_CHANNELS] == 0) {
-            silence_trail += 1;
+            silence_tail += 1;
         }
 
         uint32_t current_tick = data.current_frame / frames_per_tick;
-        if (current_tick > end_tick && silence_trail == 10)  break;
+        if (current_tick > end_tick && silence_tail == 2000)  break;
         current_frame += 1;
     }
 
@@ -606,7 +624,7 @@ void init_audio_device() {
 
 // plugin life cycle
 
-void plug_init(void) {
+void plug_init() {
     state = malloc(sizeof(*state));
     assert(state != NULL && "Buy more RAM lol");
     memset(state, 0, sizeof(*state));
@@ -631,21 +649,24 @@ void plug_init(void) {
     };
 }
 
-void plug_cleanup(void) {
+void plug_cleanup() {
     ma_device_uninit(&state->audio_device);
     free(state);
     state = NULL;
 }
 
-void *plug_pre_reload(void) {
+void *plug_pre_reload() {
+    // TODO: on macOS it crashes if we don't stop audio before hotreload, but on Linux it's ok
+    ma_device_uninit(&state->audio_device);
     return state;
 }
 
 void plug_post_reload(void *old_state) {
     state = old_state;
+    init_audio_device();
 }
 
-void plug_update(void) {
+void plug_update() {
     assert(state != NULL && "Plugin state is not initialized.");
     int screen_width = GetScreenWidth();
     int screen_height = GetScreenHeight();
